@@ -401,6 +401,8 @@ func (p *SecurityCheckPipeline) containerSignature(cfg *SecurityConfig) []int {
 	return sig
 }
 
+func (p *SecurityCheckPipeline) IsStale() bool { return p.isStale() }
+
 func (p *SecurityCheckPipeline) isStale() bool {
 	if p.config == nil || p.rebuildChecks == nil {
 		return false
