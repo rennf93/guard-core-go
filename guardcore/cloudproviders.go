@@ -883,14 +883,15 @@ func (m *CloudManager) IsCloudIP(ip string, selectors []string) bool {
 	}
 	blocked, carveouts := parseCloudSelectors(selectors)
 	m.mu.RLock()
-	defer m.mu.RUnlock()
+	matched := false
+	var emptyProviders []string
 	for provider := range blocked {
 		set, ok := m.ipRanges[provider]
 		if !ok {
 			continue
 		}
 		if len(set.networks) == 0 {
-			m.warnEmptyRanges(provider)
+			emptyProviders = append(emptyProviders, provider)
 			continue
 		}
 		allowedRegions := carveouts[provider]
@@ -901,10 +902,18 @@ func (m *CloudManager) IsCloudIP(ip string, selectors []string) bool {
 			if len(allowedRegions) > 0 && allowedRegions[set.regions[key]] {
 				continue
 			}
-			return true
+			matched = true
+			break
+		}
+		if matched {
+			break
 		}
 	}
-	return false
+	m.mu.RUnlock()
+	for _, provider := range emptyProviders {
+		m.warnEmptyRanges(provider)
+	}
+	return matched
 }
 
 func (m *CloudManager) GetCloudProviderDetails(ip string, selectors []string) (string, string, bool) {

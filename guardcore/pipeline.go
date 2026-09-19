@@ -656,11 +656,15 @@ func buildChecks(cfg *SecurityConfig, ban *IPBanManager, rateLimit *RateLimitMan
 		{"time_window", false, func(*SecurityConfig) bool { return timeWindowApplies(routeConfigs) }, func(cfg *SecurityConfig) SecurityCheck {
 			return &timeWindowCheck{cfg: cfg, routes: routeConfigs}
 		}},
-		{"cloud_ip_refresh", false, func(cfg *SecurityConfig) bool { return len(cfg.BlockCloudProviders) > 0 || cfg.EnableDynamicRules }, nil},
+		{"cloud_ip_refresh", false, func(cfg *SecurityConfig) bool { return cloudApplies(cfg, routeConfigs) }, func(cfg *SecurityConfig) SecurityCheck {
+			return &cloudIPRefreshCheck{cfg: cfg, manager: DefaultCloudManager}
+		}},
 		{"ip_security", true, func(*SecurityConfig) bool { return true }, func(cfg *SecurityConfig) SecurityCheck {
 			return &ipSecurityCheck{cfg: cfg, ban: ban, name: "ip_security"}
 		}},
-		{"cloud_provider", false, func(cfg *SecurityConfig) bool { return len(cfg.BlockCloudProviders) > 0 || cfg.EnableDynamicRules }, nil},
+		{"cloud_provider", false, func(cfg *SecurityConfig) bool { return cloudApplies(cfg, routeConfigs) }, func(cfg *SecurityConfig) SecurityCheck {
+			return &cloudProviderCheck{cfg: cfg, manager: DefaultCloudManager}
+		}},
 		{"user_agent", false, func(cfg *SecurityConfig) bool { return userAgentApplies(cfg, routeConfigs) }, func(cfg *SecurityConfig) SecurityCheck {
 			return &userAgentCheck{cfg: cfg, routes: routeConfigs}
 		}},

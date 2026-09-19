@@ -121,6 +121,8 @@ type SecurityConfig struct {
 	LogRequestLevel     string
 	LogSuspiciousLevel  string
 
+	CloudIPRefreshInterval int
+
 	revision atomic.Uint64
 }
 
@@ -153,6 +155,7 @@ func DefaultSecurityConfig() *SecurityConfig {
 		LogSensitiveHeaders:         map[string]bool{},
 		LogSensitiveParams:          map[string]bool{},
 		LogSensitiveBodyFields:      map[string]bool{},
+		CloudIPRefreshInterval:      DefaultCloudIPRefreshInterval,
 	}
 }
 
@@ -188,14 +191,17 @@ func (c *SecurityConfig) Validate() error {
 	if c.EnableCORS {
 		return c.unsupported("enable_cors", "CORS handling is not implemented in this port yet")
 	}
-	if len(c.BlockCloudProviders) > 0 {
-		return c.unsupported("block_cloud_providers", "cloud provider blocking is not implemented in this port yet")
-	}
 	if len(c.WhitelistCountries) > 0 {
 		return c.unsupported("whitelist_countries", "geo blocking is not implemented in this port yet")
 	}
 	if len(c.BlockedCountries) > 0 {
 		return c.unsupported("blocked_countries", "geo blocking is not implemented in this port yet")
+	}
+	for _, selector := range c.BlockCloudProviders {
+		provider, _, _ := strings.Cut(selector, ":!")
+		if !ValidCloudProviders[provider] {
+			return fmt.Errorf("block_cloud_providers: unknown cloud provider %q (valid: %v; a bare name blocks the whole provider, suffix ':!region' carves out a region exception)", selector, AllCloudProviders)
+		}
 	}
 	if level := strings.ToUpper(c.LogRequestLevel); level != "" {
 		if !ValidLogLevels[level] {
@@ -290,6 +296,15 @@ func (c *SecurityConfig) Validate() error {
 	}
 	if c.Detection.MaxBodyInspectBytes <= 0 {
 		c.Detection.MaxBodyInspectBytes = 262144
+	}
+	if c.CloudIPRefreshInterval <= 0 {
+		c.CloudIPRefreshInterval = DefaultCloudIPRefreshInterval
+	}
+	if c.CloudIPRefreshInterval < MinCloudIPRefreshInterval {
+		c.CloudIPRefreshInterval = MinCloudIPRefreshInterval
+	}
+	if c.CloudIPRefreshInterval > MaxCloudIPRefreshInterval {
+		c.CloudIPRefreshInterval = MaxCloudIPRefreshInterval
 	}
 	if c.RedisURL == "" {
 		c.RedisURL = DefaultRedisURL
