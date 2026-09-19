@@ -342,6 +342,34 @@ func fireBlockHook(cfg *SecurityConfig, req Request, checkName, reason, triggerI
 	}()
 }
 
+func fireBlockHookForced(cfg *SecurityConfig, req Request, checkName, reason, triggerInfo string, passiveMode bool, statusCode int) {
+	if cfg == nil || cfg.OnBlock == nil {
+		return
+	}
+	ip := resolveClientIP(req)
+	if ip == "" {
+		ip = UnknownClientIdentity
+	}
+	payload := map[string]any{
+		"check_name":   checkName,
+		"reason":       reason,
+		"trigger_info": triggerInfo,
+		"passive_mode": passiveMode,
+		"client_ip":    ip,
+		"path":         req.URLPath(),
+		"method":       req.Method(),
+		"status_code":  statusCode,
+	}
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("on_block hook raised: %v", r)
+			}
+		}()
+		cfg.OnBlock(req, payload)
+	}()
+}
+
 type SecurityCheckPipeline struct {
 	mu                     sync.RWMutex
 	checks                 []SecurityCheck
@@ -607,7 +635,9 @@ func buildChecks(cfg *SecurityConfig, ban *IPBanManager, rateLimit *RateLimitMan
 		}, func(cfg *SecurityConfig) SecurityCheck {
 			return &httpsEnforcementCheck{cfg: cfg}
 		}},
-		{"request_logging", false, func(cfg *SecurityConfig) bool { return cfg.LogRequestLevel != "" }, nil},
+		{"request_logging", false, func(cfg *SecurityConfig) bool { return cfg.LogRequestLevel != "" }, func(cfg *SecurityConfig) SecurityCheck {
+			return &requestLoggingCheck{cfg: cfg, logger: log.Default()}
+		}},
 		{"request_size_content", false, func(*SecurityConfig) bool { return requestSizeContentApplies(routeConfigs) }, func(cfg *SecurityConfig) SecurityCheck {
 			return &requestSizeContentCheck{cfg: cfg, routes: routeConfigs}
 		}},
@@ -620,7 +650,9 @@ func buildChecks(cfg *SecurityConfig, ban *IPBanManager, rateLimit *RateLimitMan
 		{"referrer", false, func(*SecurityConfig) bool { return referrerApplies(routeConfigs) }, func(cfg *SecurityConfig) SecurityCheck {
 			return &referrerCheck{cfg: cfg, routes: routeConfigs}
 		}},
-		{"custom_validators", false, func(*SecurityConfig) bool { return false }, nil},
+		{"custom_validators", false, func(*SecurityConfig) bool { return customValidatorsApplies(routeConfigs) }, func(cfg *SecurityConfig) SecurityCheck {
+			return &customValidatorsCheck{cfg: cfg, logger: log.Default(), routes: routeConfigs}
+		}},
 		{"time_window", false, func(*SecurityConfig) bool { return timeWindowApplies(routeConfigs) }, func(cfg *SecurityConfig) SecurityCheck {
 			return &timeWindowCheck{cfg: cfg, routes: routeConfigs}
 		}},
@@ -638,7 +670,9 @@ func buildChecks(cfg *SecurityConfig, ban *IPBanManager, rateLimit *RateLimitMan
 		{"suspicious_activity", false, func(cfg *SecurityConfig) bool { return cfg.EnablePenetrationDetection }, func(cfg *SecurityConfig) SecurityCheck {
 			return &suspiciousActivityCheck{cfg: cfg, ban: ban, counts: &suspiciousCountStore{m: map[string]map[string]int{}}}
 		}},
-		{"custom_request", false, func(cfg *SecurityConfig) bool { return cfg.CustomRequestCheck != nil }, nil},
+		{"custom_request", false, func(cfg *SecurityConfig) bool { return cfg.CustomRequestCheck != nil }, func(cfg *SecurityConfig) SecurityCheck {
+			return &customRequestCheck{cfg: cfg, logger: log.Default()}
+		}},
 	}
 	var checks []SecurityCheck
 	for _, spec := range specs {

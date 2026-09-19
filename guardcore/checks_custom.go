@@ -1,0 +1,104 @@
+package guardcore
+
+import "log"
+
+type requestLoggingCheck struct {
+	cfg    *SecurityConfig
+	logger *log.Logger
+}
+
+func (c *requestLoggingCheck) CheckName() string             { return "request_logging" }
+func (c *requestLoggingCheck) EnforcedOnExcludedPaths() bool { return false }
+func (c *requestLoggingCheck) AppliesTo(cfg *SecurityConfig) bool {
+	return cfg != nil && cfg.LogRequestLevel != ""
+}
+
+func (c *requestLoggingCheck) Check(req Request) *Response {
+	LogActivity(req, LogOptions{
+		Logger:              c.logger,
+		LogType:             "request",
+		Level:               c.cfg.LogRequestLevel,
+		CheckName:           c.CheckName(),
+		MutedCheckLogs:      c.cfg.MutedCheckLogs,
+		SensitiveHeaders:    c.cfg.LogSensitiveHeaders,
+		SensitiveParams:     c.cfg.LogSensitiveParams,
+		SensitiveBodyFields: c.cfg.LogSensitiveBodyFields,
+	})
+	return nil
+}
+
+type customValidatorsCheck struct {
+	cfg    *SecurityConfig
+	logger *log.Logger
+	routes []*RouteConfig
+}
+
+func (c *customValidatorsCheck) CheckName() string             { return "custom_validators" }
+func (c *customValidatorsCheck) EnforcedOnExcludedPaths() bool { return false }
+func (c *customValidatorsCheck) AppliesTo(cfg *SecurityConfig) bool {
+	if cfg == nil {
+		return false
+	}
+	return customValidatorsApplies(c.routes)
+}
+
+func customValidatorsApplies(routes []*RouteConfig) bool {
+	return anyRoute(routes, func(rc *RouteConfig) bool { return len(rc.CustomValidators) > 0 })
+}
+
+func (c *customValidatorsCheck) Check(req Request) *Response {
+	routeConfig := req.State().RouteConfig
+	if routeConfig == nil || len(routeConfig.CustomValidators) == 0 {
+		return nil
+	}
+	cfg := c.cfg
+	for _, validator := range routeConfig.CustomValidators {
+		validationResponse := validator(req)
+		if validationResponse == nil {
+			continue
+		}
+		LogActivity(req, LogOptions{
+			Logger:              c.logger,
+			LogType:             "suspicious",
+			Reason:              "Custom validation failed",
+			Level:               cfg.LogSuspiciousLevel,
+			PassiveMode:         cfg.PassiveMode,
+			CheckName:           c.CheckName(),
+			MutedCheckLogs:      cfg.MutedCheckLogs,
+			OnBlock:             cfg.OnBlock,
+			SensitiveHeaders:    cfg.LogSensitiveHeaders,
+			SensitiveParams:     cfg.LogSensitiveParams,
+			SensitiveBodyFields: cfg.LogSensitiveBodyFields,
+		})
+		if !cfg.PassiveMode {
+			fireBlockHookForced(cfg, req, c.CheckName(), "Custom validation failed", "custom_validation", false, validationResponse.StatusCode)
+			return validationResponse
+		}
+	}
+	return nil
+}
+
+type customRequestCheck struct {
+	cfg    *SecurityConfig
+	logger *log.Logger
+}
+
+func (c *customRequestCheck) CheckName() string             { return "custom_request" }
+func (c *customRequestCheck) EnforcedOnExcludedPaths() bool { return false }
+func (c *customRequestCheck) AppliesTo(cfg *SecurityConfig) bool {
+	return cfg != nil && cfg.CustomRequestCheck != nil
+}
+
+func (c *customRequestCheck) Check(req Request) *Response {
+	if c.cfg.CustomRequestCheck == nil {
+		return nil
+	}
+	customResponse := c.cfg.CustomRequestCheck(req)
+	if customResponse == nil {
+		return nil
+	}
+	if c.cfg.PassiveMode {
+		return nil
+	}
+	return customResponse
+}

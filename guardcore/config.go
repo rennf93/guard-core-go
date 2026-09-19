@@ -119,6 +119,7 @@ type SecurityConfig struct {
 	GlobalBehaviorRules []string
 	CustomRequestCheck  func(req Request) *Response
 	LogRequestLevel     string
+	LogSuspiciousLevel  string
 
 	revision atomic.Uint64
 }
@@ -178,9 +179,6 @@ func (c *SecurityConfig) Validate() error {
 	if len(c.GlobalBehaviorRules) > 0 {
 		return c.unsupported("global_behavior_rules", "behavioral rules are not implemented in this port yet")
 	}
-	if c.CustomRequestCheck != nil {
-		return c.unsupported("custom_request_check", "custom request checks are not implemented in this port yet")
-	}
 	if c.EnableDynamicRules {
 		return c.unsupported("enable_dynamic_rules", "dynamic rules are not implemented in this port yet")
 	}
@@ -199,11 +197,19 @@ func (c *SecurityConfig) Validate() error {
 	if len(c.BlockedCountries) > 0 {
 		return c.unsupported("blocked_countries", "geo blocking is not implemented in this port yet")
 	}
-	if c.LogRequestLevel != "" {
-		if !ValidLogLevels[strings.ToUpper(c.LogRequestLevel)] {
+	if level := strings.ToUpper(c.LogRequestLevel); level != "" {
+		if !ValidLogLevels[level] {
 			return fmt.Errorf("log_request_level: invalid level %q (want INFO/DEBUG/WARNING/ERROR/CRITICAL)", c.LogRequestLevel)
 		}
-		return c.unsupported("log_request_level", "per-request logging is not implemented in this port yet")
+		c.LogRequestLevel = level
+	}
+	if level := strings.ToUpper(c.LogSuspiciousLevel); level != "" {
+		if !ValidLogLevels[level] {
+			return fmt.Errorf("log_suspicious_level: invalid level %q (want INFO/DEBUG/WARNING/ERROR/CRITICAL)", c.LogSuspiciousLevel)
+		}
+		c.LogSuspiciousLevel = level
+	} else {
+		c.LogSuspiciousLevel = "WARNING"
 	}
 
 	if c.TrustedProxyDepth < 1 {

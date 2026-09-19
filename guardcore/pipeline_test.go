@@ -313,8 +313,6 @@ func TestUnsupportedConfigFeaturesFailClosed(t *testing.T) {
 		{"blocked_countries", func(c *SecurityConfig) { c.BlockedCountries = []string{"CN"} }},
 		{"whitelist_countries", func(c *SecurityConfig) { c.WhitelistCountries = []string{"US"} }},
 		{"global_behavior_rules", func(c *SecurityConfig) { c.GlobalBehaviorRules = []string{"rule"} }},
-		{"custom_request_check", func(c *SecurityConfig) { c.CustomRequestCheck = func(req Request) *Response { return nil } }},
-		{"log_request_level", func(c *SecurityConfig) { c.LogRequestLevel = "INFO" }},
 	}
 	for _, tc := range cases {
 		_, err := NewSecurityConfig(tc.mutate)

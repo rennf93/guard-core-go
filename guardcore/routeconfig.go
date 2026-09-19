@@ -47,6 +47,7 @@ type RouteConfig struct {
 	APIKeyHeader                string
 	AuthorizationHeaderRequired string
 	GeoRateLimits               map[string]RateLimitEntry
+	CustomValidators            []func(req Request) *Response
 }
 
 func (r *RouteConfig) HasBypass(name string) bool {
