@@ -71,7 +71,7 @@ func (c *customValidatorsCheck) Check(req Request) *Response {
 			SensitiveBodyFields: cfg.LogSensitiveBodyFields,
 		})
 		if !cfg.PassiveMode {
-			fireBlockHookForced(cfg, req, c.CheckName(), "Custom validation failed", "custom_validation", false, validationResponse.StatusCode)
+			fireBlockHook(cfg, req, c.CheckName(), "Custom validation failed", "custom_validation", false, validationResponse.StatusCode)
 			return validationResponse
 		}
 	}

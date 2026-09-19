@@ -108,8 +108,8 @@ func TestCustomValidatorsCheckFailBlocks(t *testing.T) {
 	if !strings.Contains(buf.String(), "Suspicious activity detected from") || !strings.Contains(buf.String(), "Reason: Custom validation failed") {
 		t.Fatalf("failure must log suspicious: %q", buf.String())
 	}
-	if len(hookPayloads) != 1 || hookPayloads[0]["check_name"] != "custom_validators" || hookPayloads[0]["status_code"] != 418 {
-		t.Fatalf("on_block must fire for custom_validators: %v", hookPayloads)
+	if len(hookPayloads) != 0 {
+		t.Fatalf("on_block must NOT fire for custom_validators (ON_BLOCK_EXCLUDED_CHECK_NAMES): %v", hookPayloads)
 	}
 	stash := req.State().BlockStash
 	if stash == nil || stash.Reason != "Custom validation failed" || stash.TriggerInfo != "" {
@@ -258,7 +258,7 @@ func TestCustomValidatorsPipelineLevel(t *testing.T) {
 	}
 }
 
-func TestCustomValidatorsPipelineStashCarriedToHook(t *testing.T) {
+func TestCustomValidatorsPipelineStashNotFiredToHook(t *testing.T) {
 	cfg := testConfig(t)
 	var reasons []string
 	cfg.OnBlock = func(req Request, payload map[string]any) {
@@ -277,8 +277,12 @@ func TestCustomValidatorsPipelineStashCarriedToHook(t *testing.T) {
 	if resp := pipeline.Execute(req); resp == nil {
 		t.Fatalf("expected block")
 	}
-	if len(reasons) != 1 || reasons[0] != "Custom validation failed" {
-		t.Fatalf("stash reason must reach the hook exactly once: %v", reasons)
+	if len(reasons) != 0 {
+		t.Fatalf("on_block must not fire for custom_validators (ON_BLOCK_EXCLUDED_CHECK_NAMES): %v", reasons)
+	}
+	stash := req.State().BlockStash
+	if stash == nil || stash.Reason != "Custom validation failed" {
+		t.Fatalf("block stash must still be set: %+v", stash)
 	}
 }
 
