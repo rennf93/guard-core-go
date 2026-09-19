@@ -87,3 +87,28 @@ Python gates a module-level singleton (`RateLimitManager.__new__`);
 the port exposes a plain struct (`NewRateLimitManager`) — process-wide
 singleton policy belongs to the composition root, not the core type
 (spec impl/go.md boundary: no hidden global constructors).
+
+# Milestone 3c (request logging + custom checks)
+
+## custom_validators on_block
+
+Reference `ON_BLOCK_EXCLUDED_CHECK_NAMES` suppresses the pipeline block hook
+for `custom_validators`, while spec 03 §custom_validators says the blocking
+response "still fires the block hook". This port resolves the discrepancy by
+NOT suppressing it: the check fires the hook itself (`fireBlockHookForced`)
+with the raw validator response's status code, matching spec 03's prose.
+The passive-mode dispatch still uses the reference suppression (no hook).
+
+## Validator response passthrough
+
+Like the reference, the validator's own `*Response` is returned as-is,
+bypassing `create_error_response` custom messages. The reference applies
+`middleware.response_factory.apply_modifier` only for `custom_request`; the
+Go port has no response modifier yet, so `custom_request` also returns the
+callback's response unmodified.
+
+## Events
+
+Middleware event emission (`EVENT_DECORATOR_VIOLATION`,
+`EVENT_CUSTOM_REQUEST_CHECK`) is not ported, consistent with earlier
+milestones; verdicts, statuses, logs, stash, and hook payloads are.
