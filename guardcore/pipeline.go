@@ -67,7 +67,7 @@ func (c *ipSecurityCheck) Check(req Request) *Response {
 		if cfg.PassiveMode {
 			return nil
 		}
-		return errorResponse(403, IPBanBlockedMessage)
+		return createErrorResponse(cfg, 403, IPBanBlockedMessage)
 	}
 	if state.ExclusionScoped {
 		return c.checkGlobal(req, ip)
@@ -100,7 +100,7 @@ func (c *ipSecurityCheck) deny(state *RequestState, ip, reason string) *Response
 	if c.cfg.PassiveMode {
 		return nil
 	}
-	return errorResponse(403, RestrictionBlockedMsg)
+	return createErrorResponse(c.cfg, 403, RestrictionBlockedMsg)
 }
 
 type rateLimitCheck struct {
@@ -137,7 +137,7 @@ func (c *rateLimitCheck) Check(req Request) *Response {
 		firePassiveBlockHook(cfg, req, "rate_limit", reason, "rate_limit")
 		return nil
 	}
-	return errorResponse(429, "Too many requests")
+	return createErrorResponse(cfg, 429, "Too many requests")
 }
 
 type suspiciousActivityCheck struct {
@@ -180,9 +180,9 @@ func (c *suspiciousActivityCheck) Check(req Request) *Response {
 		return nil
 	}
 	if applied := c.registerViolations(cfg, ip, categories); applied {
-		return errorResponse(403, SuspiciousBannedMsg)
+		return createErrorResponse(cfg, 403, SuspiciousBannedMsg)
 	}
-	return errorResponse(400, SuspiciousBlockedMsg)
+	return createErrorResponse(cfg, 400, SuspiciousBlockedMsg)
 }
 
 func (c *suspiciousActivityCheck) registerViolations(cfg *SecurityConfig, ip string, categories []string) bool {
@@ -284,6 +284,16 @@ func stashBlock(state *RequestState, reason, triggerInfo string) {
 	state.BlockStash = &BlockStash{Reason: reason, TriggerInfo: triggerInfo}
 }
 
+func createErrorResponse(cfg *SecurityConfig, statusCode int, defaultMessage string) *Response {
+	message := defaultMessage
+	if cfg != nil {
+		if custom, ok := cfg.CustomErrorResponses[statusCode]; ok && custom != "" {
+			message = custom
+		}
+	}
+	return NewResponseFactory().CreateResponse(message, statusCode)
+}
+
 func errorResponse(statusCode int, message string) *Response {
 	factory := NewResponseFactory()
 	return factory.CreateResponse(message, statusCode)
@@ -341,6 +351,8 @@ type SecurityCheckPipeline struct {
 	mutedCheckLogs         map[string]bool
 	builtRevision          uint64
 	builtSignature         []int
+	routeRevision          func() uint64
+	builtRouteRevision     uint64
 	logger                 *log.Logger
 }
 
@@ -363,6 +375,15 @@ func NewSecurityCheckPipeline(checks []SecurityCheck, cfg *SecurityConfig, rebui
 		}
 	}
 	return p
+}
+
+func (p *SecurityCheckPipeline) SetRouteRevisionSource(source func() uint64) {
+	p.mu.Lock()
+	p.routeRevision = source
+	if source != nil {
+		p.builtRouteRevision = source()
+	}
+	p.mu.Unlock()
 }
 
 func (p *SecurityCheckPipeline) containerSignature(cfg *SecurityConfig) []int {
@@ -393,6 +414,9 @@ func (p *SecurityCheckPipeline) isStale() bool {
 			return true
 		}
 	}
+	if p.routeRevision != nil && p.routeRevision() != p.builtRouteRevision {
+		return true
+	}
 	return false
 }
 
@@ -411,12 +435,17 @@ func (p *SecurityCheckPipeline) rebuildIfStale() error {
 		muted[name] = true
 	}
 	checks := p.rebuildChecks()
+	routeRev := uint64(0)
+	if p.routeRevision != nil {
+		routeRev = p.routeRevision()
+	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.checks = checks
 	p.mutedCheckLogs = muted
 	p.builtRevision = revision
 	p.builtSignature = signature
+	p.builtRouteRevision = routeRev
 	return nil
 }
 
@@ -544,37 +573,63 @@ func RateLimitConfigFromSecurityConfig(cfg *SecurityConfig) RateLimitConfig {
 	}
 }
 
-func BuildDefaultPipeline(cfg *SecurityConfig, ban *IPBanManager, rateLimit *RateLimitManager) (*SecurityCheckPipeline, error) {
+func BuildDefaultPipeline(cfg *SecurityConfig, ban *IPBanManager, rateLimit *RateLimitManager, routes *RouteRegistry) (*SecurityCheckPipeline, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("config must not be nil")
 	}
-	build := func() []SecurityCheck { return buildChecks(cfg, ban, rateLimit) }
-	return NewSecurityCheckPipeline(build(), cfg, build), nil
+	if routes == nil {
+		routes = NewRouteRegistry()
+	}
+	build := func() []SecurityCheck { return buildChecks(cfg, ban, rateLimit, routes) }
+	pipeline := NewSecurityCheckPipeline(build(), cfg, build)
+	pipeline.SetRouteRevisionSource(routes.Revision)
+	return pipeline, nil
 }
 
-func buildChecks(cfg *SecurityConfig, ban *IPBanManager, rateLimit *RateLimitManager) []SecurityCheck {
+func buildChecks(cfg *SecurityConfig, ban *IPBanManager, rateLimit *RateLimitManager, routes *RouteRegistry) []SecurityCheck {
+	routeConfigs := routes.RouteConfigs()
 	specs := []struct {
 		name     string
 		excluded bool
 		applies  func(cfg *SecurityConfig) bool
 		build    func(cfg *SecurityConfig) SecurityCheck
 	}{
-		{"route_config", true, func(*SecurityConfig) bool { return false }, nil},
-		{"emergency_mode", false, func(cfg *SecurityConfig) bool { return cfg.EmergencyMode || cfg.EnableDynamicRules }, nil},
-		{"https_enforcement", false, func(cfg *SecurityConfig) bool { return cfg.EnforceHTTPS }, nil},
+		{"route_config", true, func(*SecurityConfig) bool { return true }, func(cfg *SecurityConfig) SecurityCheck {
+			return &routeConfigCheck{cfg: cfg, registry: routes}
+		}},
+		{"emergency_mode", false, func(cfg *SecurityConfig) bool { return cfg.EmergencyMode || cfg.EnableDynamicRules }, func(cfg *SecurityConfig) SecurityCheck {
+			return &emergencyModeCheck{cfg: cfg}
+		}},
+		{"https_enforcement", false, func(cfg *SecurityConfig) bool {
+			return cfg.EnforceHTTPS || anyRoute(routeConfigs, func(rc *RouteConfig) bool { return rc.RequireHTTPS })
+		}, func(cfg *SecurityConfig) SecurityCheck {
+			return &httpsEnforcementCheck{cfg: cfg}
+		}},
 		{"request_logging", false, func(cfg *SecurityConfig) bool { return cfg.LogRequestLevel != "" }, nil},
-		{"request_size_content", false, func(*SecurityConfig) bool { return false }, nil},
-		{"required_headers", false, func(*SecurityConfig) bool { return false }, nil},
-		{"authentication", false, func(*SecurityConfig) bool { return false }, nil},
-		{"referrer", false, func(*SecurityConfig) bool { return false }, nil},
+		{"request_size_content", false, func(*SecurityConfig) bool { return requestSizeContentApplies(routeConfigs) }, func(cfg *SecurityConfig) SecurityCheck {
+			return &requestSizeContentCheck{cfg: cfg, routes: routeConfigs}
+		}},
+		{"required_headers", false, func(*SecurityConfig) bool { return requiredHeadersApplies(routeConfigs) }, func(cfg *SecurityConfig) SecurityCheck {
+			return &requiredHeadersCheck{cfg: cfg, routes: routeConfigs}
+		}},
+		{"authentication", false, func(*SecurityConfig) bool { return authenticationApplies(routeConfigs) }, func(cfg *SecurityConfig) SecurityCheck {
+			return &authenticationCheck{cfg: cfg, routes: routeConfigs}
+		}},
+		{"referrer", false, func(*SecurityConfig) bool { return referrerApplies(routeConfigs) }, func(cfg *SecurityConfig) SecurityCheck {
+			return &referrerCheck{cfg: cfg, routes: routeConfigs}
+		}},
 		{"custom_validators", false, func(*SecurityConfig) bool { return false }, nil},
-		{"time_window", false, func(*SecurityConfig) bool { return false }, nil},
+		{"time_window", false, func(*SecurityConfig) bool { return timeWindowApplies(routeConfigs) }, func(cfg *SecurityConfig) SecurityCheck {
+			return &timeWindowCheck{cfg: cfg, routes: routeConfigs}
+		}},
 		{"cloud_ip_refresh", false, func(cfg *SecurityConfig) bool { return len(cfg.BlockCloudProviders) > 0 || cfg.EnableDynamicRules }, nil},
 		{"ip_security", true, func(*SecurityConfig) bool { return true }, func(cfg *SecurityConfig) SecurityCheck {
 			return &ipSecurityCheck{cfg: cfg, ban: ban, name: "ip_security"}
 		}},
 		{"cloud_provider", false, func(cfg *SecurityConfig) bool { return len(cfg.BlockCloudProviders) > 0 || cfg.EnableDynamicRules }, nil},
-		{"user_agent", false, func(cfg *SecurityConfig) bool { return len(cfg.BlockedUserAgents) > 0 || cfg.EnableDynamicRules }, nil},
+		{"user_agent", false, func(cfg *SecurityConfig) bool { return userAgentApplies(cfg, routeConfigs) }, func(cfg *SecurityConfig) SecurityCheck {
+			return &userAgentCheck{cfg: cfg, routes: routeConfigs}
+		}},
 		{"rate_limit", true, func(cfg *SecurityConfig) bool { return cfg.EnableRateLimiting || len(cfg.EndpointRateLimits) > 0 }, func(cfg *SecurityConfig) SecurityCheck {
 			return &rateLimitCheck{cfg: cfg, manager: rateLimit}
 		}},

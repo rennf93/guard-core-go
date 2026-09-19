@@ -1,0 +1,112 @@
+package guardcore
+
+import "strings"
+
+const unresolvedRouteReason = "Route resolution failed; per-route decorator config could not be applied"
+
+type routeConfigCheck struct {
+	cfg      *SecurityConfig
+	registry *RouteRegistry
+}
+
+func (c *routeConfigCheck) CheckName() string             { return "route_config" }
+func (c *routeConfigCheck) EnforcedOnExcludedPaths() bool { return true }
+func (c *routeConfigCheck) AppliesTo(*SecurityConfig) bool {
+	return true
+}
+
+func (c *routeConfigCheck) Check(req Request) *Response {
+	state := req.State()
+	state.RouteConfig = c.registry.Get(state.GuardRouteID)
+	if ip := resolveClientIP(req); ip != "" {
+		state.ClientIP = ip
+	}
+	if c.cfg.RouteResolutionStrict && state.RouteUnresolved {
+		stashBlock(state, unresolvedRouteReason, "route_unresolved")
+		if c.cfg.PassiveMode {
+			firePassiveBlockHook(c.cfg, req, "route_config", unresolvedRouteReason, "route_unresolved")
+			return nil
+		}
+		return createErrorResponse(c.cfg, 500, "Route resolution failed")
+	}
+	return nil
+}
+
+type emergencyModeCheck struct {
+	cfg *SecurityConfig
+}
+
+func (c *emergencyModeCheck) CheckName() string             { return "emergency_mode" }
+func (c *emergencyModeCheck) EnforcedOnExcludedPaths() bool { return false }
+func (c *emergencyModeCheck) AppliesTo(cfg *SecurityConfig) bool {
+	return cfg.EmergencyMode || cfg.EnableDynamicRules
+}
+
+func (c *emergencyModeCheck) Check(req Request) *Response {
+	cfg := c.cfg
+	if !cfg.EmergencyMode {
+		return nil
+	}
+	state := req.State()
+	clientIP := state.ClientIP
+	if clientIP == "" {
+		clientIP = resolveClientIP(req)
+	}
+	isWhitelisted := clientIP != "" && ipMatchesList(clientIP, cfg.EmergencyWhitelist)
+	if isWhitelisted {
+		return nil
+	}
+	reason := "[EMERGENCY MODE] Access denied for IP " + clientIP
+	stashBlock(state, reason, "emergency_mode")
+	if cfg.PassiveMode {
+		firePassiveBlockHook(cfg, req, "emergency_mode", reason, "emergency_mode")
+		return nil
+	}
+	return createErrorResponse(cfg, 503, "Service temporarily unavailable")
+}
+
+type httpsEnforcementCheck struct {
+	cfg *SecurityConfig
+}
+
+func (c *httpsEnforcementCheck) CheckName() string             { return "https_enforcement" }
+func (c *httpsEnforcementCheck) EnforcedOnExcludedPaths() bool { return false }
+func (c *httpsEnforcementCheck) AppliesTo(cfg *SecurityConfig) bool {
+	return cfg.EnforceHTTPS
+}
+
+func (c *httpsEnforcementCheck) isTrustedProxy(connectingIP string) bool {
+	return ipMatchesList(connectingIP, c.cfg.TrustedProxies)
+}
+
+func (c *httpsEnforcementCheck) isRequestHTTPS(req Request) bool {
+	isHTTPS := req.URLScheme() == "https"
+	cfg := c.cfg
+	if cfg.TrustXForwardedProto && len(cfg.TrustedProxies) > 0 {
+		if host := req.ClientHost(); host != "" && c.isTrustedProxy(host) {
+			if proto, ok := req.Headers().Get("X-Forwarded-Proto"); ok && strings.EqualFold(proto, "https") {
+				isHTTPS = true
+			}
+		}
+	}
+	return isHTTPS
+}
+
+func (c *httpsEnforcementCheck) Check(req Request) *Response {
+	cfg := c.cfg
+	routeConfig := req.State().RouteConfig
+	httpsRequired := cfg.EnforceHTTPS
+	if routeConfig != nil {
+		httpsRequired = routeConfig.RequireHTTPS
+	}
+	if !httpsRequired {
+		return nil
+	}
+	if c.isRequestHTTPS(req) {
+		return nil
+	}
+	if cfg.PassiveMode {
+		return nil
+	}
+	return NewResponseFactory().CreateRedirectResponse(req.URLReplaceScheme("https"), 301)
+}

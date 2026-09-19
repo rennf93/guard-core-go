@@ -19,6 +19,9 @@ type RequestState struct {
 	BypassChecks     []string
 	BlockStash       *BlockStash
 	Extras           map[string]any
+	GuardRouteID     string
+	RouteConfig      *RouteConfig
+	AuthPrincipal    any
 	bypassChecksOnce sync.Once
 	bypassSet        map[string]bool
 }

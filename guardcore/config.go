@@ -3,6 +3,7 @@ package guardcore
 import (
 	"fmt"
 	"net/netip"
+	"regexp"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -106,6 +107,8 @@ type SecurityConfig struct {
 
 	EnforceHTTPS        bool
 	EmergencyMode       bool
+	EmergencyWhitelist  []string
+	AuthVerifier        AuthVerifier
 	EnableDynamicRules  bool
 	EnableAgent         bool
 	EnableCORS          bool
@@ -178,12 +181,6 @@ func (c *SecurityConfig) Validate() error {
 	if c.CustomRequestCheck != nil {
 		return c.unsupported("custom_request_check", "custom request checks are not implemented in this port yet")
 	}
-	if c.EnforceHTTPS {
-		return c.unsupported("enforce_https", "HTTPS enforcement is not implemented in this port yet")
-	}
-	if c.EmergencyMode {
-		return c.unsupported("emergency_mode", "emergency mode is not implemented in this port yet")
-	}
 	if c.EnableDynamicRules {
 		return c.unsupported("enable_dynamic_rules", "dynamic rules are not implemented in this port yet")
 	}
@@ -195,9 +192,6 @@ func (c *SecurityConfig) Validate() error {
 	}
 	if len(c.BlockCloudProviders) > 0 {
 		return c.unsupported("block_cloud_providers", "cloud provider blocking is not implemented in this port yet")
-	}
-	if len(c.BlockedUserAgents) > 0 {
-		return c.unsupported("blocked_user_agents", "user-agent blocking is not implemented in this port yet")
 	}
 	if len(c.WhitelistCountries) > 0 {
 		return c.unsupported("whitelist_countries", "geo blocking is not implemented in this port yet")
@@ -214,6 +208,11 @@ func (c *SecurityConfig) Validate() error {
 
 	if c.TrustedProxyDepth < 1 {
 		return fmt.Errorf("trusted_proxy_depth: must be >= 1, got %d", c.TrustedProxyDepth)
+	}
+	for _, pattern := range c.BlockedUserAgents {
+		if _, err := regexp.Compile(pattern); err != nil {
+			return fmt.Errorf("blocked_user_agents: invalid pattern %q: %w", pattern, err)
+		}
 	}
 	if err := validateIPList("trusted_proxies", c.TrustedProxies); err != nil {
 		return err

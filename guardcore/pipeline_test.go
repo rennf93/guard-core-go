@@ -280,12 +280,12 @@ func TestBuildDefaultPipelineImplementedSlots(t *testing.T) {
 	cfg := testConfig(t)
 	ban := NewIPBanManager(nil, nil)
 	rl := NewRateLimitManager(RateLimitConfigFromSecurityConfig(cfg), nil, ban)
-	p, err := BuildDefaultPipeline(cfg, ban, rl)
+	p, err := BuildDefaultPipeline(cfg, ban, rl, nil)
 	if err != nil {
 		t.Fatalf("BuildDefaultPipeline: %v", err)
 	}
 	names := p.CheckNames()
-	want := []string{"ip_security", "rate_limit", "suspicious_activity"}
+	want := []string{"route_config", "ip_security", "rate_limit", "suspicious_activity"}
 	if strings.Join(names, ",") != strings.Join(want, ",") {
 		t.Fatalf("expected pipeline %v with default config, got %v", want, names)
 	}
@@ -306,13 +306,10 @@ func TestUnsupportedConfigFeaturesFailClosed(t *testing.T) {
 		name   string
 		mutate func(*SecurityConfig)
 	}{
-		{"enforce_https", func(c *SecurityConfig) { c.EnforceHTTPS = true }},
-		{"emergency_mode", func(c *SecurityConfig) { c.EmergencyMode = true }},
 		{"enable_dynamic_rules", func(c *SecurityConfig) { c.EnableDynamicRules = true }},
 		{"enable_agent", func(c *SecurityConfig) { c.EnableAgent = true }},
 		{"enable_cors", func(c *SecurityConfig) { c.EnableCORS = true }},
 		{"block_cloud_providers", func(c *SecurityConfig) { c.BlockCloudProviders = []string{"AWS"} }},
-		{"blocked_user_agents", func(c *SecurityConfig) { c.BlockedUserAgents = []string{"curl"} }},
 		{"blocked_countries", func(c *SecurityConfig) { c.BlockedCountries = []string{"CN"} }},
 		{"whitelist_countries", func(c *SecurityConfig) { c.WhitelistCountries = []string{"US"} }},
 		{"global_behavior_rules", func(c *SecurityConfig) { c.GlobalBehaviorRules = []string{"rule"} }},
