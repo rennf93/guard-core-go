@@ -112,3 +112,64 @@ callback's response unmodified.
 Middleware event emission (`EVENT_DECORATOR_VIOLATION`,
 `EVENT_CUSTOM_REQUEST_CHECK`) is not ported, consistent with earlier
 milestones; verdicts, statuses, logs, stash, and hook payloads are.
+
+# Milestone 4 (cloud provider blocking)
+
+## IsCloudIP deadlock fix
+
+The M4 data-plane commit's `IsCloudIP` called `warnEmptyRanges` while
+holding the manager RLock; `warnEmptyRanges` takes the write lock, so the
+empty-ranges path self-deadlocked (Go RWMutex forbids recursive
+read-then-write). No test exercised the path before M4. Fixed by
+collecting empty providers under the read lock and warning after release;
+the 300s per-provider cooldown semantics are unchanged and tested.
+
+## cloud_ip_refresh_interval clamping
+
+Python raises a ValidationError outside [60, 86400] (pydantic `ge`/`le`);
+the port clamps, per spec 10 prose ("clamped to [60, 86400]") and the
+milestone scope. The Go zero value (field unset) maps to the 3600 default,
+so both construction paths land in range.
+
+## First-refresh wiring point
+
+Python blocks startup inside `cloud_handler.initialize_redis` during
+Redis/agent init. The port exposes `CloudManager.InitializeRedis`
+(installs the `RedisCloudIpStore`, then a blocking `RefreshAsync`); the
+adapter milestone must call it at startup, since this port has no
+composition root yet. Neither implementation touches the refresh stamp
+there (it starts at 0 in both), so the first request after startup
+re-schedules a cheap cache-hit refresh under single-flight.
+
+## Singleton policy
+
+Python binds the module-level `cloud_handler` singleton inside the check
+constructors. The port ships the package-level `DefaultCloudManager` (from
+the data-plane commit) and binds it explicitly in `buildChecks`; unit and
+integration tests construct their own managers via `NewCloudManager` where
+isolation matters. As with the RateLimitManager note, the type is a plain
+struct and the package default only mirrors the reference singleton.
+
+## Events deferred
+
+`cloud_blocked` and `decorator_violation` emission for route-level cloud
+blocks (spec 10 Events) is out of scope, consistent with milestones 2b/3c;
+the 403 verdict, suspicious log, block stash, and passive-mode hook
+payload are ported. The event bus is a future milestone.
+
+## Geo deferred
+
+`whitelist_countries` / `blocked_countries` remain fail-closed
+(UnsupportedFeatureError). Country filtering, the GeoIP handler, and
+`country_blocked` events (spec 10 Country filtering) are a later
+milestone. Route-level `BlockCloudProviders` selectors are not validated
+against the provider registry because the port has no route-config
+validation layer (consistent with other route fields); unknown providers
+at match time are skipped as absent from the registry.
+
+## Clock seam
+
+The refresh check reads the manager's injectable `nowFunc` instead of
+`time.time()` directly; the default is wall clock and the stamp advances
+to Unix seconds, matching the reference's `int(time.time())` stamping.
+This is a test seam, not an observable divergence.
