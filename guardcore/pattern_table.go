@@ -1,5 +1,10 @@
 package guardcore
 
+import (
+	"sort"
+	"strings"
+)
+
 type patternDef struct {
 	Pattern  string
 	Contexts []string
@@ -266,10 +271,6 @@ var weightOverrides = map[string]float64{
 	"(?i)\\bWHERE\\s+[\\w.\"]+\\s*(?:=|<|>|<=|>=|LIKE|IN)\\b": 0.5,
 }
 
-var fileUploadDangerousSource = "(?:\\A|[;,:\\n])\\s*filename\\s*=\\s*[\\\"'][^\\\"']*\\.(?:php\\d*|phtml|shtml|asax|ascx|ashx|asmx|aspx|bash|jspx|phar|phps|asa|asp|bat|cer|cfc|cfm|cgi|cmd|com|exe|hta|jsp|msi|pht|vbe|vbs|war|wsf|js|pl|py|rb|sh|ws)[\\\"']"
-var fileUploadDoubleSource = "(?:\\A|[;,:\\n])\\s*filename\\s*=\\s*[\\\"'][^\\\"']*\\.(?:php\\d*|phtml|shtml|asax|ascx|ashx|asmx|aspx|bash|jspx|phar|phps|asa|asp|bat|cer|cfc|cfm|cgi|cmd|exe|hta|jsp|msi|pht|vbe|vbs|war|wsf|js|pl|py|rb|sh|ws)(?![A-Za-z0-9])(?:[^ \\\"'][^\\\"']*)?\\.(?:docx|jpeg|pptx|tiff|webm|webp|xlsx|avi|bmp|doc|gif|ico|jpg|mkv|mov|mp3|mp4|odt|pdf|png|ppt|svg|tif|wav|xls)[\\\"']"
-var fileUploadTruncationSource = "(?:\\A|[;,:\\n])\\s*filename\\s*=\\s*[\\\"'][^\\\"']*\\.(?:php\\d*|phtml|shtml|asax|ascx|ashx|asmx|aspx|bash|jspx|phar|phps|asa|asp|bat|cer|cfc|cfm|cgi|cmd|exe|hta|jsp|msi|pht|vbe|vbs|war|wsf|js|pl|py|rb|sh|ws)(?![A-Za-z0-9])(?:(?:%00|\\\\u0000|\\\\x00|\\\\0|\\x00|;)[^\\\"']*|\\.)[\\\"']"
-var fileUploadDecodedTruncationSource = "(?:\\A|[;,:\\n])\\s*filename\\s*=\\s*[\\\"'][^\\\"']*\\.(?:php\\d*|phtml|shtml|asax|ascx|ashx|asmx|aspx|bash|jspx|phar|phps|asa|asp|bat|cer|cfc|cfm|cgi|cmd|exe|hta|jsp|msi|pht|vbe|vbs|war|wsf|js|pl|py|rb|sh|ws)(?![A-Za-z0-9])(?:(?:\\x00|;)[^\\\"']*|\\.)[\\\"']"
 var uploadDangerousExts = map[string]bool{
 	"asa":   true,
 	"asax":  true,
@@ -371,4 +372,41 @@ var uploadBenignExts = map[string]bool{
 	"webp": true,
 	"xls":  true,
 	"xlsx": true,
+}
+
+func extAlternation(exts map[string]bool, phpPrefix bool) string {
+	keys := make([]string, 0, len(exts))
+	for k := range exts {
+		keys = append(keys, k)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		if len(keys[i]) != len(keys[j]) {
+			return len(keys[i]) > len(keys[j])
+		}
+		return keys[i] < keys[j]
+	})
+	parts := make([]string, 0, len(keys)+1)
+	if phpPrefix {
+		parts = append(parts, `php\d*`)
+	}
+	for _, k := range keys {
+		parts = append(parts, goQuoteMeta(k))
+	}
+	return strings.Join(parts, "|")
+}
+
+var fileUploadDangerousAlt = extAlternation(uploadDangerousExts, true)
+var fileUploadDoubleAlt = extAlternation(uploadDoubleExts, true)
+var fileUploadBenignAlt = extAlternation(uploadBenignExts, false)
+
+func goQuoteMeta(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		switch r {
+		case '\\', '.', '+', '*', '?', '(', ')', '|', '[', ']', '{', '}', '^', '$', '/':
+			b.WriteByte('\\')
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
 }

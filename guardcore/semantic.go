@@ -24,23 +24,17 @@ func looksLikeBinaryContent(content string) bool {
 	return float64(nonText)/float64(total) >= binaryContentRatioThreshold
 }
 
-var attackKeywords = map[string]map[string]bool{
-	"xss":      setOf("script", "javascript", "onerror", "onload", "onclick", "onmouseover", "alert", "eval", "document", "cookie", "window", "location"),
-	"sql":      setOf("select", "union", "insert", "update", "delete", "drop", "from", "where", "order", "group", "having", "concat", "substring", "database", "table", "column"),
-	"command":  setOf("exec", "system", "shell", "cmd", "bash", "powershell", "wget", "curl", "nc", "netcat", "chmod", "chown", "sudo", "passwd"),
-	"path":     setOf("etc", "passwd", "shadow", "hosts", "proc", "boot", "win", "ini"),
-	"template": setOf("render", "template", "jinja", "mustache", "handlebars", "ejs", "pug", "twig"),
+var attackKeywords = map[string][]string{
+	"xss":      keywordList("script", "javascript", "onerror", "onload", "onclick", "onmouseover", "alert", "eval", "document", "cookie", "window", "location"),
+	"sql":      keywordList("select", "union", "insert", "update", "delete", "drop", "from", "where", "order", "group", "having", "concat", "substring", "database", "table", "column"),
+	"command":  keywordList("exec", "system", "shell", "cmd", "bash", "powershell", "wget", "curl", "nc", "netcat", "chmod", "chown", "sudo", "passwd"),
+	"path":     keywordList("etc", "passwd", "shadow", "hosts", "proc", "boot", "win", "ini"),
+	"template": keywordList("render", "template", "jinja", "mustache", "handlebars", "ejs", "pug", "twig"),
 }
+
+func keywordList(words ...string) []string { return words }
 
 var attackKeywordOrder = []string{"xss", "sql", "command", "path", "template"}
-
-func setOf(words ...string) map[string]bool {
-	m := make(map[string]bool, len(words))
-	for _, w := range words {
-		m[w] = true
-	}
-	return m
-}
 
 var attackStructures = map[string]string{
 	"tag_like":       `<[^>]+>`,
@@ -156,6 +150,9 @@ func detectEncodingLayers(content string) int {
 	return layers
 }
 
+var sqlBoostRE = regexp.MustCompile(`(?i)\b(?:union|select|from|where)\b`)
+var cmdBoostRE = regexp.MustCompile(`[;&|]`)
+
 func getStructuralPatternBoost(attackType, content string) float64 {
 	scanContent := content
 	var re *regexp.Regexp
@@ -164,9 +161,9 @@ func getStructuralPatternBoost(attackType, content string) float64 {
 		re = structureRes["tag_like"]
 		scanContent = tagScanWindow(content)
 	case "sql":
-		re = regexp.MustCompile(`(?i)\b(?:union|select|from|where)\b`)
+		re = sqlBoostRE
 	case "command":
-		re = regexp.MustCompile(`[;&|]`)
+		re = cmdBoostRE
 	case "path":
 		re = structureRes["path_traversal"]
 	default:
@@ -188,7 +185,7 @@ func semanticAnalyze(content string) map[string]any {
 	for _, attackType := range attackKeywordOrder {
 		keywords := attackKeywords[attackType]
 		matches := 0
-		for k := range keywords {
+		for _, k := range keywords {
 			if tokenSet[k] {
 				matches++
 			}

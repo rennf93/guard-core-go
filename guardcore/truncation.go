@@ -104,7 +104,7 @@ func extractAndConcatenateAttackRegions(t scanText, regions [][2]int, budget int
 		if chunkLen > remaining {
 			chunkLen = remaining
 		}
-		out = append(out, t.runes(r[0], r[0]+chunkLen)...)
+		out = append(out, t.rs[r[0]:r[0]+chunkLen]...)
 		remaining -= chunkLen
 		if remaining <= 0 {
 			break
