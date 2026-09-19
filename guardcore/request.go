@@ -100,8 +100,8 @@ type guardRequest struct {
 	err  error
 }
 
-func (r *guardRequest) URLPath() string       { return r.opts.Path }
-func (r *guardRequest) URLScheme() string     { return r.opts.Scheme }
+func (r *guardRequest) URLPath() string   { return r.opts.Path }
+func (r *guardRequest) URLScheme() string { return r.opts.Scheme }
 func (r *guardRequest) Method() string {
 	if r.opts.Method == "" {
 		return "GET"
