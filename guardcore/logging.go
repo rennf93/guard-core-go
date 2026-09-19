@@ -200,10 +200,13 @@ func RedactURLForDisplay(rawURL string, sensitiveParams, sensitiveBodyFields, se
 	}
 	sensitive := mergedSensitiveNames(sensitiveParams, mergeSensitiveLogBodyFields(sensitiveBodyFields), sensitiveHeaders)
 	changed := false
+	username := ""
+	hasPassword := false
 	if parsed.User != nil {
-		if _, hasPassword := parsed.User.Password(); hasPassword {
-			username := parsed.User.Username()
-			parsed.User = url.UserPassword(username, RedactedPlaceholder)
+		username = parsed.User.Username()
+		_, hasPassword = parsed.User.Password()
+		if hasPassword {
+			parsed.User = nil
 			changed = true
 		}
 	}
@@ -232,7 +235,15 @@ func RedactURLForDisplay(rawURL string, sensitiveParams, sensitiveBodyFields, se
 	if !changed {
 		return rawURL
 	}
-	return parsed.String()
+	result := parsed.String()
+	if hasPassword {
+		marker := "://" + parsed.Host
+		idx := strings.Index(result, marker)
+		if idx >= 0 {
+			result = result[:idx+3] + username + ":[REDACTED]@" + parsed.Host + result[idx+len(marker):]
+		}
+	}
+	return result
 }
 
 type LogOptions struct {
