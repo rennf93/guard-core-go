@@ -30,3 +30,6 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# Internal working notes (kept local, never distributed)
+KNOWN_GAPS.md
