@@ -45,3 +45,45 @@ legacy-key migration uses `SCAN` as required.
 (spec 09 Events) is not part of Milestone 2a; the ban manager carries
 no agent handler yet. Event shapes are deferred to the pipeline
 milestone.
+
+# Milestone 2b (rate limiting)
+
+## ZSET member stringification
+
+The pipeline fallback writes the member as Go's
+`strconv.FormatFloat(now, 'f', -1, 64)`; Python writes `str(current_time)`
+(shortest round-trip repr). For epoch-scale doubles both render a plain
+decimal shortest round-trip string, so members collapse/compare
+identically for equal doubles; the digits can differ from Python's for
+the same instant only in exotic cases. Spec 07 discrepancy 3 states the
+wire float value is what matters; internal representation is not
+observable.
+
+## Identical-timestamp member collapse
+
+Preserved per spec: hits recorded at the same float timestamp collapse
+as one zset member (Lua `ZADD key now now`). The port does not uniquify
+members.
+
+## Fail-open warning flag
+
+The once-per-process `redis_fail_open` warning is a package-level flag
+(`rateLimitFailOpenWarned`), matching Python's module-level
+`_redis_fail_open_warned`. It is exported only via a test hook
+(`resetRateLimitFailOpenWarned`).
+
+## Events deferred
+
+`rate_limited` / `rate_limit_script_reloaded` security-event emission
+(section 07 Events) needs the agent/event pipeline (future milestone);
+the manager exposes the `OnScriptReload` hook the pipeline path will
+wire up. Pipeline-tier `decorator_violation` /
+`dynamic_rule_violation` middleware events are likewise out of scope
+here (no middleware layer yet).
+
+## RateLimitManager singleton
+
+Python gates a module-level singleton (`RateLimitManager.__new__`);
+the port exposes a plain struct (`NewRateLimitManager`) — process-wide
+singleton policy belongs to the composition root, not the core type
+(spec impl/go.md boundary: no hidden global constructors).
