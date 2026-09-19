@@ -528,6 +528,22 @@ func (p *SecurityCheckPipeline) handleRebuildError(req Request, err error) *Resp
 	return errorResponse(500, message)
 }
 
+func RateLimitConfigFromSecurityConfig(cfg *SecurityConfig) RateLimitConfig {
+	return RateLimitConfig{
+		EnableRateLimiting:     cfg.EnableRateLimiting,
+		RateLimit:              cfg.RateLimit,
+		RateLimitWindow:        cfg.RateLimitWindow,
+		EndpointRateLimits:     cfg.EndpointRateLimits,
+		EnableRateLimitAutoBan: cfg.EnableRateLimitAutoBan,
+		PassiveMode:            cfg.PassiveMode,
+		EnableIPBanning:        cfg.EnableIPBanning,
+		AutoBanThreshold:       cfg.AutoBanThreshold,
+		AutoBanDuration:        cfg.AutoBanDuration,
+		ThreatBanConfig:        cfg.ThreatBanConfig,
+		RedisFailOpen:          cfg.RedisFailOpen,
+	}
+}
+
 func BuildDefaultPipeline(cfg *SecurityConfig, ban *IPBanManager, rateLimit *RateLimitManager) (*SecurityCheckPipeline, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("config must not be nil")
