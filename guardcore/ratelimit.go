@@ -316,7 +316,7 @@ func (m *RateLimitManager) emitScriptReloaded() {
 	}
 }
 
-func (m *RateLimitManager) redisRequestCount(clientIP string, currentTime, windowStart float64, window, limit int, endpointPath string) (int, bool, error) {
+func (m *RateLimitManager) redisRequestCount(clientIP string, currentTime, windowStart float64, window, limit int, endpointPath string, forcePipeline bool) (int, bool, error) {
 	m.mu.Lock()
 	redisHandler := m.redis
 	rlRedis := m.rlRedis
@@ -332,7 +332,7 @@ func (m *RateLimitManager) redisRequestCount(clientIP string, currentTime, windo
 	var count int64
 	var err error
 
-	if sha != "" {
+	if sha != "" && !forcePipeline {
 		count, err = rlRedis.EvalSha(sha, keyName, currentTime, window, limit)
 		if err != nil && IsNoScriptError(err) {
 			newSHA, loadErr := rlRedis.ScriptLoad(rateLimitScript)
@@ -420,7 +420,7 @@ func (m *RateLimitManager) runTier(clientIP string, tier rateLimitTier) (blocked
 	currentTime := m.now()
 	windowStart := currentTime - float64(tier.window)
 
-	redisCount, handled, redisErr := m.redisRequestCount(clientIP, currentTime, windowStart, tier.window, tier.limit, tier.endpointPath)
+	redisCount, handled, redisErr := m.redisRequestCount(clientIP, currentTime, windowStart, tier.window, tier.limit, tier.endpointPath, false)
 	if redisErr != nil {
 		return false, 0, redisErr
 	}
@@ -449,11 +449,15 @@ func (m *RateLimitManager) CheckRateLimit(clientIP, urlPath string, route *Route
 	m.mu.Lock()
 	tiers := m.tiersFor(clientIP, urlPath, route, countryOfIP)
 	m.mu.Unlock()
+	var lastCount int
+	var lastTier rateLimitTier
 	for _, tier := range tiers {
 		blocked, count, err := m.runTier(clientIP, tier)
 		if err != nil {
 			return nil, err
 		}
+		lastCount = count
+		lastTier = tier
 		if blocked {
 			return &RateLimitOutcome{
 				Blocked:    true,
@@ -465,7 +469,7 @@ func (m *RateLimitManager) CheckRateLimit(clientIP, urlPath string, route *Route
 			}, nil
 		}
 	}
-	return &RateLimitOutcome{Blocked: false, Window: m.cfg.RateLimitWindow}, nil
+	return &RateLimitOutcome{Blocked: false, Count: lastCount, Window: lastTier.window, Tier: lastTier.name}, nil
 }
 
 func validateRateLimitPrimitiveInput(ip, endpointPath string) error {
@@ -490,7 +494,7 @@ func (m *RateLimitManager) CheckRateLimitByIP(ip, endpointPath string) (bool, er
 	windowStart := currentTime - float64(m.cfg.RateLimitWindow)
 
 	allowed := false
-	count, handled, err := m.redisRequestCount(ip, currentTime, windowStart, m.cfg.RateLimitWindow, m.cfg.RateLimit, endpointPath)
+	count, handled, err := m.redisRequestCount(ip, currentTime, windowStart, m.cfg.RateLimitWindow, m.cfg.RateLimit, endpointPath, true)
 	if err != nil {
 		return false, err
 	}
