@@ -145,7 +145,7 @@ func init() {
 		ldapParenBreakoutSource:                func(m rmatch, context string) bool { return ldapWildcardChainIsInjection(m) },
 		ldapParenConjunctionSource:             func(m rmatch, context string) bool { return ldapParenConjunctionIsInjection(m) },
 		gluedBacktickCandidateSource:           gluedBacktickPairIsInjection,
-		sensitiveSourceExtensionPathSource:     func(m rmatch, context string) bool { return !sourceExtensionPathIsProbe(context) },
+		sensitiveSourceExtensionPathSource:     func(m rmatch, context string) bool { return sourceExtensionPathIsProbe(context) },
 		gluedDollarSubstitutionCandidateSource: dollarSubstitutionPairIsInjection,
 		braceExpansionCommandSource:            braceExpansionIsDangerousCommand,
 		quoteSpliceCandidateSource:             quoteSpliceTokenIsDangerousCommand,
@@ -168,8 +168,8 @@ func init() {
 		var bounds []scanBound
 		for _, p := range pairs {
 			bounds = append(bounds, scanBound{
-				prefix: mustCompile(p[0], 0, windowTimeout),
-				term:   mustCompile(p[1], 0, windowTimeout),
+				prefix: mustCompile(p[0], regexp2.IgnoreCase, windowTimeout),
+				term:   mustCompile(p[1], regexp2.IgnoreCase, windowTimeout),
 			})
 		}
 		scanWindowBoundsCompiled[source] = bounds

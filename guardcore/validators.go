@@ -287,15 +287,17 @@ func ldapFilterExpressionForwardExtent(t scanText, start, scanLimit int) int {
 	depth := 0
 	for position < scanLimit {
 		r := t.rs[position]
-		if containsRune("\"'\n", r) {
-			return position
-		}
-		if r == '(' {
-			depth++
-		} else if depth == 0 {
-			return position
-		} else {
-			depth--
+		if containsRune("()\"'\n", r) {
+			if containsRune("\"'\n", r) {
+				return position
+			}
+			if r == '(' {
+				depth++
+			} else if depth == 0 {
+				return position
+			} else {
+				depth--
+			}
 		}
 		position++
 	}

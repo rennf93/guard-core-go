@@ -102,7 +102,7 @@ func templateFrame(t scanText, opening, closing string, start, end int) (rmatch,
 	b = append(b, '[')
 	b = append(b, '^')
 	b = appendRuneQuoted(b, []rune(closing)[0])
-	b = append(b, ']', '*', '\\', 'z')
+	b = append(b, ']', '*')
 	for _, r := range closing {
 		b = appendRuneQuoted(b, r)
 	}
