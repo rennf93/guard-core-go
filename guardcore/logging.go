@@ -1,0 +1,326 @@
+package guardcore
+
+import (
+	"encoding/json"
+	"fmt"
+	"log"
+	"net/url"
+	"regexp"
+	"sort"
+	"strings"
+)
+
+var defaultSensitiveLogHeaders = map[string]bool{
+	"authorization":       true,
+	"proxy-authorization": true,
+	"cookie":              true,
+	"x-api-key":           true,
+}
+
+var defaultSensitiveLogFields = map[string]bool{
+	"access_token":  true,
+	"refresh_token": true,
+	"api_key":       true,
+	"apikey":        true,
+	"token":         true,
+	"password":      true,
+	"secret":        true,
+	"client_secret": true,
+	"signature":     true,
+}
+
+const RedactedPlaceholder = "[REDACTED]"
+
+func mergeSensitiveNames(defaults, extra map[string]bool) map[string]bool {
+	merged := make(map[string]bool, len(defaults)+len(extra))
+	for name := range defaults {
+		merged[name] = true
+	}
+	for name := range extra {
+		merged[strings.ToLower(name)] = true
+	}
+	return merged
+}
+
+func mergeSensitiveLogHeaders(extra map[string]bool) map[string]bool {
+	return mergeSensitiveNames(defaultSensitiveLogHeaders, extra)
+}
+
+func mergeSensitiveLogBodyFields(extra map[string]bool) map[string]bool {
+	return mergeSensitiveNames(defaultSensitiveLogFields, extra)
+}
+
+func mergedSensitiveNames(sensitiveParams, sensitiveBodyFields, sensitiveHeaders map[string]bool) map[string]bool {
+	merged := mergeSensitiveLogBodyFields(sensitiveBodyFields)
+	for name := range mergeSensitiveNames(nil, sensitiveParams) {
+		merged[name] = true
+	}
+	for name := range mergeSensitiveLogHeaders(sensitiveHeaders) {
+		merged[name] = true
+	}
+	return merged
+}
+
+func RedactSensitiveHeaders(headers map[string]string, sensitiveHeaders, sensitiveBodyFields, sensitiveParams map[string]bool) map[string]string {
+	sensitive := mergeSensitiveLogHeaders(sensitiveHeaders)
+	bodyFields := mergeSensitiveLogBodyFields(sensitiveBodyFields)
+	out := make(map[string]string, len(headers))
+	for key, value := range headers {
+		if sensitive[strings.ToLower(strings.TrimSpace(key))] {
+			out[key] = RedactedPlaceholder
+			continue
+		}
+		out[key] = RedactBlobForDisplay(value, sensitiveParams, bodyFields, sensitiveHeaders)
+	}
+	return out
+}
+
+func formatSensitiveHeaders(headers map[string]string) string {
+	keys := make([]string, 0, len(headers))
+	for key := range headers {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys))
+	for _, key := range keys {
+		parts = append(parts, fmt.Sprintf("%s=%s", key, headers[key]))
+	}
+	return strings.Join(parts, ", ")
+}
+
+var xmlElementRedactRe = regexp.MustCompile(`(?i)<([A-Za-z_][\w.:-]*)>([^<]*)</([A-Za-z_][\w.:-]*)>`)
+
+func redactXMLElements(text string, sensitive map[string]bool) string {
+	return xmlElementRedactRe.ReplaceAllStringFunc(text, func(match string) string {
+		parts := xmlElementRedactRe.FindStringSubmatch(match)
+		if len(parts) != 4 || !sensitive[strings.ToLower(parts[1])] || parts[1] != parts[3] {
+			return match
+		}
+		return "<" + parts[1] + ">" + RedactedPlaceholder + "</" + parts[1] + ">"
+	})
+}
+
+var pairRedactRe = regexp.MustCompile(`(?i)([A-Za-z_][\w.-]*)\s*([=:])\s*("[^"]*"|'[^']*'|[^\s&;,'"\]]+)`)
+
+func redactPairsInText(text string, sensitive map[string]bool) string {
+	return pairRedactRe.ReplaceAllStringFunc(text, func(match string) string {
+		parts := pairRedactRe.FindStringSubmatch(match)
+		if len(parts) != 4 || !sensitive[strings.ToLower(parts[1])] {
+			return match
+		}
+		return parts[1] + parts[2] + RedactedPlaceholder
+	})
+}
+
+func redactSensitiveJSON(node any, sensitive map[string]bool) (any, bool) {
+	switch typed := node.(type) {
+	case map[string]any:
+		changed := false
+		out := make(map[string]any, len(typed))
+		for key, value := range typed {
+			if sensitive[strings.ToLower(key)] {
+				out[key] = RedactedPlaceholder
+				changed = true
+				continue
+			}
+			redacted, sub := redactSensitiveJSON(value, sensitive)
+			out[key] = redacted
+			changed = changed || sub
+		}
+		return out, changed
+	case []any:
+		changed := false
+		out := make([]any, len(typed))
+		for i, value := range typed {
+			redacted, sub := redactSensitiveJSON(value, sensitive)
+			out[i] = redacted
+			changed = changed || sub
+		}
+		return out, changed
+	default:
+		return node, false
+	}
+}
+
+func marshalCompactJSON(value any) string {
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return ""
+	}
+	return string(encoded)
+}
+
+func jsonRedactText(text string, sensitive map[string]bool) string {
+	var parsed any
+	if err := json.Unmarshal([]byte(text), &parsed); err != nil {
+		return ""
+	}
+	switch parsed.(type) {
+	case map[string]any, []any:
+	default:
+		return ""
+	}
+	redacted, changed := redactSensitiveJSON(parsed, sensitive)
+	if !changed {
+		return ""
+	}
+	return marshalCompactJSON(redacted)
+}
+
+func RedactBlobForDisplay(text string, sensitiveParams, sensitiveBodyFields, sensitiveHeaders map[string]bool) string {
+	if text == "" {
+		return text
+	}
+	sensitive := mergedSensitiveNames(sensitiveParams, mergeSensitiveLogBodyFields(sensitiveBodyFields), sensitiveHeaders)
+	if redacted := jsonRedactText(text, sensitive); redacted != "" {
+		return redacted
+	}
+	if decoded, err := url.QueryUnescape(text); err == nil && decoded != text {
+		if redacted := jsonRedactText(decoded, sensitive); redacted != "" {
+			return redacted
+		}
+	}
+	return redactPairsInText(redactXMLElements(text, sensitive), sensitive)
+}
+
+func RedactHeaderValueForDisplay(value string, sensitiveParams, sensitiveBodyFields, sensitiveHeaders map[string]bool) string {
+	if value == "" {
+		return value
+	}
+	return RedactBlobForDisplay(value, sensitiveParams, sensitiveBodyFields, sensitiveHeaders)
+}
+
+func RedactURLForDisplay(rawURL string, sensitiveParams, sensitiveBodyFields, sensitiveHeaders map[string]bool) string {
+	if rawURL == "" {
+		return rawURL
+	}
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return rawURL
+	}
+	sensitive := mergedSensitiveNames(sensitiveParams, mergeSensitiveLogBodyFields(sensitiveBodyFields), sensitiveHeaders)
+	changed := false
+	if parsed.User != nil {
+		if _, hasPassword := parsed.User.Password(); hasPassword {
+			username := parsed.User.Username()
+			parsed.User = url.UserPassword(username, RedactedPlaceholder)
+			changed = true
+		}
+	}
+	if parsed.RawQuery != "" {
+		values, qerr := url.ParseQuery(parsed.RawQuery)
+		if qerr == nil {
+			queryChanged := false
+			for key := range values {
+				if sensitive[strings.ToLower(key)] {
+					values[key] = []string{RedactedPlaceholder}
+					queryChanged = true
+				}
+			}
+			if queryChanged {
+				parsed.RawQuery = values.Encode()
+				changed = true
+			}
+		}
+	}
+	if parsed.Path != "" {
+		if redacted := redactPairsInText(redactXMLElements(parsed.Path, sensitive), sensitive); redacted != parsed.Path {
+			parsed.Path = redacted
+			changed = true
+		}
+	}
+	if !changed {
+		return rawURL
+	}
+	return parsed.String()
+}
+
+type LogOptions struct {
+	Logger              *log.Logger
+	LogType             string
+	Reason              string
+	PassiveMode         bool
+	TriggerInfo         string
+	Level               string
+	CheckName           string
+	MutedCheckLogs      map[string]bool
+	OnBlock             func(req Request, payload map[string]any)
+	SensitiveHeaders    map[string]bool
+	SensitiveParams     map[string]bool
+	SensitiveBodyFields map[string]bool
+}
+
+type ActivityLogger interface {
+	LogActivity(req Request, opts LogOptions)
+}
+
+var DefaultActivityLogger ActivityLogger = defaultActivityLogger{}
+
+type defaultActivityLogger struct{}
+
+func (defaultActivityLogger) LogActivity(req Request, opts LogOptions) {
+	dispatchBlockHook(req, opts)
+	if opts.Level == "" {
+		return
+	}
+	if opts.CheckName != "" && opts.MutedCheckLogs[opts.CheckName] {
+		return
+	}
+	if opts.Logger == nil {
+		return
+	}
+	opts.Logger.Print(buildActivityMessage(req, opts))
+}
+
+func dispatchBlockHook(req Request, opts LogOptions) {
+	if opts.LogType != "suspicious" {
+		return
+	}
+	if !opts.PassiveMode {
+		stashBlock(req.State(), opts.Reason, opts.TriggerInfo)
+		return
+	}
+	fireBlockHook(&SecurityConfig{OnBlock: opts.OnBlock}, req, opts.CheckName, opts.Reason, opts.TriggerInfo, true, 0)
+}
+
+func extractRequestContext(req Request, opts LogOptions) map[string]string {
+	ip := resolveClientIP(req)
+	if ip == "" {
+		ip = UnknownClientIdentity
+	}
+	return map[string]string{
+		"client_ip": ip,
+		"method":    req.Method(),
+		"url":       RedactURLForDisplay(req.URLFull(), opts.SensitiveParams, opts.SensitiveBodyFields, opts.SensitiveHeaders),
+		"headers":   formatSensitiveHeaders(RedactSensitiveHeaders(req.Headers().Map(), opts.SensitiveHeaders, opts.SensitiveBodyFields, opts.SensitiveParams)),
+	}
+}
+
+func buildActivityMessage(req Request, opts LogOptions) string {
+	context := extractRequestContext(req, opts)
+	var details, reasonMessage string
+	switch opts.LogType {
+	case "request":
+		details = fmt.Sprintf("Request from %s: %s %s", context["client_ip"], context["method"], context["url"])
+		reasonMessage = fmt.Sprintf("Headers: %s", context["headers"])
+	case "suspicious":
+		if opts.PassiveMode {
+			details = fmt.Sprintf("[PASSIVE MODE] Penetration attempt detected from %s: %s %s", context["client_ip"], context["method"], context["url"])
+			reasonMessage = fmt.Sprintf("Headers: %s", context["headers"])
+			if opts.TriggerInfo != "" {
+				reasonMessage = fmt.Sprintf("Trigger: %s - %s", opts.TriggerInfo, reasonMessage)
+			}
+		} else {
+			details = fmt.Sprintf("Suspicious activity detected from %s: %s %s", context["client_ip"], context["method"], context["url"])
+			reasonMessage = fmt.Sprintf("Reason: %s - Headers: %s", opts.Reason, context["headers"])
+		}
+	default:
+		details = fmt.Sprintf("%s from %s: %s %s", strings.ToUpper(opts.LogType[:1])+opts.LogType[1:], context["client_ip"], context["method"], context["url"])
+		reasonMessage = fmt.Sprintf("Details: %s - Headers: %s", opts.Reason, context["headers"])
+	}
+	return fmt.Sprintf("%s - %s", details, reasonMessage)
+}
+
+func LogActivity(req Request, opts LogOptions) {
+	DefaultActivityLogger.LogActivity(req, opts)
+}
