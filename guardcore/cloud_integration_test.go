@@ -77,6 +77,8 @@ func TestIntegrationCloudCacheHitPathBlocks(t *testing.T) {
 	if resp == nil || resp.StatusCode != 403 || string(resp.Body) != CloudBlockedMsg {
 		t.Fatalf("cached cloud range must block with 403 %q, got %+v", CloudBlockedMsg, resp)
 	}
+	waitForCondition(t, 5*time.Second, func() bool { return !DefaultCloudManager.Refreshing() },
+		"scheduled background refresh must drain before cleanup removes the shared cache")
 }
 
 func TestIntegrationCloudRefreshOnInterval(t *testing.T) {
@@ -141,6 +143,8 @@ func TestIntegrationCloudCrossInstanceCacheSharing(t *testing.T) {
 	if resp == nil || resp.StatusCode != 403 || string(resp.Body) != CloudBlockedMsg {
 		t.Fatalf("ranges written by another instance must block through this one, got %+v", resp)
 	}
+	waitForCondition(t, 5*time.Second, func() bool { return !DefaultCloudManager.Refreshing() },
+		"scheduled background refresh must drain before cleanup removes the shared cache")
 }
 
 func TestIntegrationCloudMissFailsOpenUntilRefresh(t *testing.T) {
