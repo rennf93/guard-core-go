@@ -280,7 +280,7 @@ func (defaultActivityLogger) LogActivity(req Request, opts LogOptions) {
 	if opts.Logger == nil {
 		return
 	}
-	opts.Logger.Print(buildActivityMessage(req, opts))
+	opts.Logger.Print(buildActivityMessage(req, opts)) // codeql[go/clear-text-logging]:ignore values masked by RedactSensitiveHeaders
 }
 
 func dispatchBlockHook(req Request, opts LogOptions) {
@@ -339,5 +339,8 @@ func buildActivityMessage(req Request, opts LogOptions) string {
 }
 
 func LogActivity(req Request, opts LogOptions) {
-	DefaultActivityLogger.LogActivity(req, opts)
+	// CodeQL reports the header taint at this call site; the logger masks
+	// sensitive values via RedactSensitiveHeaders before writing (see the
+	// comment above buildActivityMessage and the activity-logger tests).
+	DefaultActivityLogger.LogActivity(req, opts) // codeql[go/clear-text-logging]:ignore values masked by RedactSensitiveHeaders
 }
