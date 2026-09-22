@@ -10,6 +10,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"io"
 	"log"
@@ -135,6 +136,9 @@ func guard(engine *guardcore.Engine, next http.Handler) http.Handler {
 		var body []byte
 		if r.Body != nil {
 			body, _ = io.ReadAll(io.LimitReader(r.Body, 1<<20))
+			// The engine consumes the byte slice; hand the handler a
+			// replayable body so it can decode the payload itself.
+			r.Body = io.NopCloser(bytes.NewReader(body))
 		}
 
 		header := make(map[string]string, len(r.Header))
