@@ -26,5 +26,6 @@ nav:
   - Usage: usage.md
   - Configuration: configuration.md
   - Detection: detection.md
+  - Agent wiring: agent-wiring.md
   - Conformance: conformance.md
   - Roadmap: roadmap.md

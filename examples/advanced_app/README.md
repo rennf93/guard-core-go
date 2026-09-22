@@ -49,7 +49,8 @@ docker compose up --build
 # Allowed
 curl -i http://localhost/
 
-# Penetration detection blocks the payload with the tuned 403 body
+# Penetration detection blocks the payload as suspicious activity (400;
+# the tuned 403 body appears once the IP crosses an auto-ban threshold)
 curl -i "http://localhost/test/xss?q=%3Cscript%3Ealert(1)%3C%2Fscript%3E"
 
 # Rate limiting: the sixth request in 60 seconds returns 429
@@ -68,6 +69,18 @@ curl -s -H 'X-Admin-Token: admin-token-change-me' http://localhost/admin/banned
 curl -s -X POST http://localhost/admin/unban -H 'X-Admin-Token: admin-token-change-me' \
   -H 'Content-Type: application/json' -d '{"ip": "203.0.113.9"}'
 ```
+
+## Module layout note
+
+Both example apps live inside the root module
+(`github.com/rennf93/guard-core-go/examples/...`) rather than in separate Go
+modules or a `go.work` workspace. Rationale: the examples pin the exact engine
+they document (same module, same commit), so `go vet ./...` and
+`go build ./...` gate them together with the engine in CI and the Dockerfiles
+`COPY go.mod go.sum` only once. Splitting them out would let an example drift
+against a published engine version while still compiling. The tradeoff: the
+examples' imports resolve only inside this module, which is fine for
+copy-paste-driven reference code.
 
 ## Configuration knobs demonstrated
 
