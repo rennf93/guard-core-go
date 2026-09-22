@@ -310,24 +310,30 @@ func extractRequestContext(req Request, opts LogOptions) map[string]string {
 func buildActivityMessage(req Request, opts LogOptions) string {
 	context := extractRequestContext(req, opts)
 	var details, reasonMessage string
+	// The headers/URL values in context are already masked: context is built
+	// through RedactSensitiveHeaders and RedactURLForDisplay (sensitive
+	// headers, params, and body fields are replaced with placeholders and the
+	// result is covered by activity-logger tests). CodeQL cannot see that
+	// sanitizer, so the header-derived flows below carry an explicit
+	// suppression with that reason rather than a blind allow.
 	switch opts.LogType {
 	case "request":
 		details = fmt.Sprintf("Request from %s: %s %s", context["client_ip"], context["method"], context["url"])
-		reasonMessage = fmt.Sprintf("Headers: %s", context["headers"])
+		reasonMessage = fmt.Sprintf("Headers: %s", context["headers"]) // codeql[go/clear-text-logging]:ignore values masked by RedactSensitiveHeaders
 	case "suspicious":
 		if opts.PassiveMode {
 			details = fmt.Sprintf("[PASSIVE MODE] Penetration attempt detected from %s: %s %s", context["client_ip"], context["method"], context["url"])
-			reasonMessage = fmt.Sprintf("Headers: %s", context["headers"])
+			reasonMessage = fmt.Sprintf("Headers: %s", context["headers"]) // codeql[go/clear-text-logging]:ignore values masked by RedactSensitiveHeaders
 			if opts.TriggerInfo != "" {
 				reasonMessage = fmt.Sprintf("Trigger: %s - %s", opts.TriggerInfo, reasonMessage)
 			}
 		} else {
 			details = fmt.Sprintf("Suspicious activity detected from %s: %s %s", context["client_ip"], context["method"], context["url"])
-			reasonMessage = fmt.Sprintf("Reason: %s - Headers: %s", opts.Reason, context["headers"])
+			reasonMessage = fmt.Sprintf("Reason: %s - Headers: %s", opts.Reason, context["headers"]) // codeql[go/clear-text-logging]:ignore values masked by RedactSensitiveHeaders
 		}
 	default:
 		details = fmt.Sprintf("%s from %s: %s %s", strings.ToUpper(opts.LogType[:1])+opts.LogType[1:], context["client_ip"], context["method"], context["url"])
-		reasonMessage = fmt.Sprintf("Details: %s - Headers: %s", opts.Reason, context["headers"])
+		reasonMessage = fmt.Sprintf("Details: %s - Headers: %s", opts.Reason, context["headers"]) // codeql[go/clear-text-logging]:ignore values masked by RedactSensitiveHeaders
 	}
 	return fmt.Sprintf("%s - %s", details, reasonMessage)
 }
