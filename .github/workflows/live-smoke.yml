@@ -143,6 +143,15 @@ jobs:
 
           token="admin-token-change-me"
 
+          # Belt and braces on top of compose --wait: nginx is only marked
+          # ready once it answers a proxied request.
+          for _ in 1 2 3 4 5 6 7 8 9 10; do
+            if curl -sS --max-time 2 -o /dev/null "$base/health" 2>/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+
           check "GET / serves"                    200 "$base/"
           check "GET /health (excluded path)"     200 "$base/health"
 

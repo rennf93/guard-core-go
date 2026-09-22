@@ -8,6 +8,15 @@ services:
     depends_on:
       advanced-app:
         condition: service_healthy
+    # Without this, `compose up --wait` reports nginx ready while the
+    # entrypoint is still configuring, and the first proxied request can be
+    # reset.
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:80/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
     restart: unless-stopped
     deploy:
       resources:
