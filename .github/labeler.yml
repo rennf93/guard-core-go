@@ -1,0 +1,50 @@
+"area: engine":
+  - changed-files:
+      - any-glob-to-any-file:
+          - guardcore/**
+
+"area: conformance":
+  - changed-files:
+      - any-glob-to-any-file:
+          - conformance/**
+
+tests:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '**/*_test.go'
+          - conformance/**
+
+examples:
+  - changed-files:
+      - any-glob-to-any-file:
+          - examples/**
+
+documentation:
+  - changed-files:
+      - any-glob-to-any-file:
+          - docs/**
+          - mkdocs.yml
+          - README.md
+          - AGENTS.md
+          - CLAUDE.md
+          - KNOWN_GAPS.md
+          - LICENSE
+
+ci:
+  - changed-files:
+      - any-glob-to-any-file:
+          - .github/**
+
+build:
+  - changed-files:
+      - any-glob-to-any-file:
+          - Dockerfile
+          - compose.yml
+          - go.mod
+          - go.sum
+
+dependencies:
+  - changed-files:
+      - any-glob-to-any-file:
+          - go.mod
+          - go.sum

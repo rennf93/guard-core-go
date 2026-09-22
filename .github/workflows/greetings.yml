@@ -1,0 +1,45 @@
+name: Greetings
+
+on: [pull_request_target, issues]
+
+permissions: {}
+
+jobs:
+  greeting:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+    steps:
+    - uses: actions/first-interaction@1c4688942c71f71d4f5502a26ea67c331730fa4d # v3.1.0
+      with:
+        repo_token: ${{ secrets.GITHUB_TOKEN }}
+        issue_message: |
+            Thanks for opening your first issue on **guard-core-go**!
+
+            To help us triage quickly, please make sure your report includes:
+            - A clear reproduction (a short Go snippet or failing test is ideal)
+            - Output of `go version` and which Go toolchain you build with (`go 1.25.x` or later)
+            - The module version you depend on and your `go.mod` requires
+            - Redis configuration if relevant (guard-core-go uses Redis for distributed bans, rate limiting, and cloud IP ranges)
+
+            A few pointers:
+            - Scan [README.md](../blob/master/README.md) and the docs site for usage guidance.
+            - **Security vulnerability?** Do **not** open a public issue - please use GitHub's private vulnerability reporting.
+
+            Thanks again - a maintainer will be with you soon.
+        pr_message: |
+            Thanks for opening your first pull request on **guard-core-go**!
+
+            Quick checklist before review (most of these are enforced by CI, but worth a glance):
+            - [ ] The PR body says `Closes #N` for an open issue (the `issue-link` check enforces it); chores take the `no-issue` label
+            - [ ] `gofmt -l .` reports no files
+            - [ ] `go vet ./...` is clean
+            - [ ] `go test ./...` passes (add `-tags integration` with Redis for the integration suite)
+            - [ ] `govulncheck ./...` is clean
+            - [ ] No `nolint` / unchecked-error shortcuts; pre-existing violations in touched files are fixed
+            - [ ] If you touched a public API, updated the relevant page under `docs/`
+
+            See [README.md](../blob/master/README.md) for the module layout and the conformance suite notes.
+
+            Welcome aboard - a maintainer will review shortly.

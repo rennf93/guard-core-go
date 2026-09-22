@@ -1,0 +1,85 @@
+name: Ecosystem Gate
+
+on:
+  pull_request:
+    branches:
+      - master
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+    inputs:
+      consumer_ref:
+        description: 'Consumer ref to test against: empty = default branch HEAD, or an explicit ref'
+        required: false
+        default: ''
+
+concurrency:
+  group: ecosystem-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  consumer-test:
+    name: ${{ matrix.consumer.repo }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        consumer:
+          - repo: rennf93/nethttp-guard
+            path: nethttp-guard
+          - repo: rennf93/gin-guard
+            path: gin-guard
+          - repo: rennf93/echo-guard
+            path: echo-guard
+          - repo: rennf93/fiber-guard
+            path: fiber-guard
+
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    steps:
+      - name: Checkout guard-core-go
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: guard-core-go
+          persist-credentials: false
+
+      - name: Checkout ${{ matrix.consumer.repo }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ matrix.consumer.repo }}
+          ref: ${{ github.event.inputs.consumer_ref }}
+          path: ${{ matrix.consumer.path }}
+
+      # No host Go toolchain: run the consumer suite inside golang:1.25-alpine,
+      # pointing the adapter's guard-core-go dependency at this checkout.
+      - name: Run the consumer test suite against this guard-core-go checkout
+        run: |
+          docker run --rm --network host \
+            -v "$PWD":/work -w /work \
+            -e GOCACHE=/tmp/gocache \
+            -e REDIS_HOST=127.0.0.1 \
+            -e CONSUMER_PATH=${{ matrix.consumer.path }} \
+            golang:1.25-alpine sh -c '
+              set -e
+              cd "$CONSUMER_PATH"
+              go mod edit -replace github.com/rennf93/guard-core-go=/work/guard-core-go
+              go mod tidy
+              go test ./...
+              go test -tags integration ./...
+            '
