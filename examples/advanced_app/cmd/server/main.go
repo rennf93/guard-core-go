@@ -12,11 +12,11 @@ import (
 	"syscall"
 	"time"
 
-	guardcore "github.com/rennf93/guard-core-go/guardcore"
+	guardcore "github.com/rennf93/guard-core-go/v4/guardcore"
 
-	"github.com/rennf93/guard-core-go/examples/advanced_app/internal/config"
-	"github.com/rennf93/guard-core-go/examples/advanced_app/internal/guardmw"
-	"github.com/rennf93/guard-core-go/examples/advanced_app/internal/routes"
+	"github.com/rennf93/guard-core-go/v4/examples/advanced_app/internal/config"
+	"github.com/rennf93/guard-core-go/v4/examples/advanced_app/internal/guardmw"
+	"github.com/rennf93/guard-core-go/v4/examples/advanced_app/internal/routes"
 )
 
 func main() {

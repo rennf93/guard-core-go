@@ -19,7 +19,7 @@ import (
 	"os"
 	"strings"
 
-	guardcore "github.com/rennf93/guard-core-go/guardcore"
+	guardcore "github.com/rennf93/guard-core-go/v4/guardcore"
 )
 
 func main() {

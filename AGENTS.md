@@ -78,7 +78,7 @@ guard-core-go/
   CLAUDE.md            byte-identical copy of AGENTS.md
   README.md            minimal (title and one-line description only)
   LICENSE              MIT
-  go.mod / go.sum      module github.com/rennf93/guard-core-go, go 1.25.0
+  go.mod / go.sum      module github.com/rennf93/guard-core-go/v4, go 1.25.0
   .gitignore           Go artifacts plus KNOWN_GAPS.md (kept local, never distributed)
   .github/
     dependabot.yml     weekly gomod and github-actions updates (grouped)
@@ -111,7 +111,7 @@ Key files in `conformance/`:
 
 ## Technology Stack
 
-- Language: Go, module `github.com/rennf93/guard-core-go`, go directive `1.25.0`; CI matrix `1.25.x` and `1.26.x`, `GOTOOLCHAIN=auto`.
+- Language: Go, module `github.com/rennf93/guard-core-go/v4`, go directive `1.25.0`; CI matrix `1.25.x` and `1.26.x`, `GOTOOLCHAIN=auto`.
 - Direct dependencies (go.mod):
   - `github.com/dlclark/regexp2 v1.12.0`: .NET-style regex engine used for all detection patterns; provides `MatchTimeout` used as a ReDoS defense (`Config.CompilerTimeout`, default 2000ms).
   - `github.com/redis/go-redis/v9 v9.7.3`: Redis client for bans, rate limiting (Lua scripts via `ScriptLoad`/`EvalSha`), and cloud range caches.

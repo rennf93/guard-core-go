@@ -1,4 +1,4 @@
-module github.com/rennf93/guard-core-go
+module github.com/rennf93/guard-core-go/v4
 
 go 1.25.0
 
