@@ -124,4 +124,9 @@ var noisePronePatternSources = map[string]bool{
 	templateDollarBraceCallSource:          true,
 	sstiHashBraceShapeSource:               true,
 	ldapParenConjunctionSource:             true,
+	// SQLi comment terminators span arbitrary whitespace between the quote
+	// and the -- / # terminator, so they routinely fire inside text-decoded
+	// binary bodies (e.g. "'\n--" byte runs in compressed payloads).
+	// Parity with upstream commit f5d53ca5.
+	sqliCommentTerminatorSource: true,
 }

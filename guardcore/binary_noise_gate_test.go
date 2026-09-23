@@ -17,6 +17,8 @@ import (
 	"testing"
 	"time"
 	"unicode/utf8"
+
+	"github.com/dlclark/regexp2"
 )
 
 const multipartFieldContext = "request_body:multipart_field"
@@ -254,9 +256,83 @@ func TestNoiseProneRegistryIsTruthful(t *testing.T) {
 			}
 		}
 	}
+	// Sources whose shape requires a specific trigram/terminator run (e.g. the
+	// SQLi comment terminator "'\n--") cannot be expected to occur in pure
+	// random noise; their registry membership and suppression are covered by
+	// the dedicated tests below (upstream commit f5d53ca5).
+	trigramShapedSources := map[string]bool{
+		sqliCommentTerminatorSource: true,
+	}
 	for source := range noisePronePatternSources {
+		if trigramShapedSources[source] {
+			continue
+		}
 		if !matchedSources[source] {
 			t.Errorf("noise-prone source never matched binary noise: %q", source)
 		}
+	}
+	if !noisePronePatternSources[sqliCommentTerminatorSource] {
+		t.Errorf("SQLi comment-terminator source must stay in the noise-prone registry")
+	}
+}
+
+// TestPDFCommentLineWithSQLiTerminatorBytesNotFlagged ports the upstream
+// PDF-prefix regression: a PDF header whose binary comment region contains an
+// apostrophe, a newline and dashes must not be reported as SQLi (regression
+// for the real-world 558KB-PDF false positive, guard-core f5d53ca5).
+func TestPDFCommentLineWithSQLiTerminatorBytesNotFlagged(t *testing.T) {
+	prefix := "%PDF-1.4\n%\xc7\x8f\xa2\n7 0 obj\n<</Length 8 0 R/Filter /FlateDecode>>\nstream\n"
+	buffer := []byte(prefix)
+	buffer = append(buffer, noiseBytes(11)[:2000]...)
+	copy(buffer[100:104], "'\n--")
+
+	result := detectPayload(t, surrogateEscapeDecoded(buffer))
+	assertNoThreat(t, result, "PDF comment line with SQLi terminator bytes")
+}
+
+// TestASCIISQLiCommentTerminatorOutsideBinaryStillDetected ports the upstream
+// companion case: the noise gate must not swallow genuine ASCII SQLi comment
+// terminators (guard-core f5d53ca5).
+func TestASCIISQLiCommentTerminatorOutsideBinaryStillDetected(t *testing.T) {
+	result := detectPayload(t, "users?name=1=1' \n-- drop table users")
+	assertThreat(t, result, "ASCII SQLi comment terminator")
+
+	found := false
+	for _, threat := range result.Threats {
+		if threat["category"] == "sqli" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected an sqli-category threat, got %v", result.Threats)
+	}
+}
+
+// TestSQLiCommentTerminatorSourceIsNoiseGated ports the upstream gate unit
+// test: a comment-terminator match whose neighborhood is binary-dense must be
+// dropped by buildRegexThreat, while the same match in ASCII surroundings
+// survives (covered by TestASCIISQLiCommentTerminatorOutsideBinaryStillDetected).
+func TestSQLiCommentTerminatorSourceIsNoiseGated(t *testing.T) {
+	denseNoise := surrogateEscapeDecoded(noiseBytes(11))[:200]
+	text := "abc \n" + "' \n--" + denseNoise
+
+	re := mustCompile(sqliCommentTerminatorSource, regexp2.IgnoreCase, windowTimeout)
+	tt := newScanText(text)
+	m, err := re.FindRunesMatchStartingAt(tt.rs, 0)
+	if err != nil || m == nil {
+		t.Fatalf("expected the comment-terminator pattern to match the fixture (err=%v)", err)
+	}
+	rm := matchFromIndices(tt, m.Index, m.Index+m.Length, "")
+	prefix := buildBinaryPrefix(tt)
+
+	threat := buildRegexThreat(&compiledPattern{
+		source:   sqliCommentTerminatorSource,
+		re:       mustCompileI(sqliCommentTerminatorSource),
+		contexts: map[string]bool{"request_body": true},
+		category: "sqli",
+	}, rm, "request_body", prefix)
+	if threat != nil {
+		t.Fatalf("expected binary-dense comment-terminator match to be gated, got %v", threat)
 	}
 }
