@@ -1,0 +1,1295 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="API security core engine for Go - detection, rate limiting, IP banning, and cloud provider blocking">
+      
+      
+        <meta name="author" content="Renn F">
+      
+      
+      
+        <link rel="prev" href="../usage/">
+      
+      
+        <link rel="next" href="../detection/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Configuration - guard-core-go</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="deep-purple" data-md-color-accent="amber">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#configuration" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="guard-core-go" class="md-header__button md-logo" aria-label="guard-core-go" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            guard-core-go
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Configuration
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="deep-purple" data-md-color-accent="amber"  aria-hidden="true"  type="radio" name="__palette" id="__palette_0">
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/rennf93/guard-core-go" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    rennf93/guard-core-go
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="guard-core-go" class="md-nav__button md-logo" aria-label="guard-core-go" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    guard-core-go
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/rennf93/guard-core-go" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    rennf93/guard-core-go
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../usage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Usage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#client-identity-and-proxy-trust" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Client identity and proxy trust
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#access-lists" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Access lists
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#redis" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Redis
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#ip-banning" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        IP banning
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rate-limiting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rate limiting
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#penetration-detection" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Penetration detection
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cloud-provider-blocking" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cloud provider blocking
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#user-agents-headers-auth" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        User agents, headers, auth
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#logging" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Logging
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#custom-behavior" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Custom behavior
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Custom behavior">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-onblock-hook" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The OnBlock hook
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#detector-tuning" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Detector tuning
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#unsupported-fail-closed-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Unsupported (fail-closed) options
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../detection/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Detection
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../agent-wiring/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent wiring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../conformance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Conformance
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../roadmap/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Roadmap
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#client-identity-and-proxy-trust" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Client identity and proxy trust
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#access-lists" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Access lists
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#redis" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Redis
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#ip-banning" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        IP banning
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rate-limiting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rate limiting
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#penetration-detection" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Penetration detection
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cloud-provider-blocking" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cloud provider blocking
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#user-agents-headers-auth" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        User agents, headers, auth
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#logging" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Logging
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#custom-behavior" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Custom behavior
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Custom behavior">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-onblock-hook" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The OnBlock hook
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#detector-tuning" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Detector tuning
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#unsupported-fail-closed-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Unsupported (fail-closed) options
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="configuration">Configuration</h1>
+<p><code>SecurityConfig</code> is one flat struct built through
+<code>guardcore.DefaultSecurityConfig()</code> or
+<code>guardcore.NewSecurityConfig(mutate func(*SecurityConfig))</code>. The latter applies
+your mutation and then runs <code>Validate()</code>, returning any validation error.</p>
+<h2 id="client-identity-and-proxy-trust">Client identity and proxy trust</h2>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Default</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>TrustedProxies</code></td>
+<td><code>[]string</code></td>
+<td>empty</td>
+<td>IPs or CIDRs whose forwarding headers are trusted</td>
+</tr>
+<tr>
+<td><code>TrustedProxyDepth</code></td>
+<td><code>int</code></td>
+<td><code>1</code></td>
+<td>Must be &gt;= 1</td>
+</tr>
+<tr>
+<td><code>TrustXForwardedProto</code></td>
+<td><code>bool</code></td>
+<td><code>false</code></td>
+<td>Honor <code>X-Forwarded-Proto</code> for HTTPS detection</td>
+</tr>
+</tbody>
+</table>
+<h2 id="access-lists">Access lists</h2>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Whitelist</code></td>
+<td><code>[]string</code></td>
+<td>IPs or CIDRs, validated at config time</td>
+</tr>
+<tr>
+<td><code>Blacklist</code></td>
+<td><code>[]string</code></td>
+<td>IPs or CIDRs, validated at config time</td>
+</tr>
+<tr>
+<td><code>ExcludePaths</code></td>
+<td><code>[]string</code></td>
+<td>Absolute paths skipped by the pipeline (defaults: <code>/docs</code>, <code>/redoc</code>, <code>/openapi.json</code>, <code>/openapi.yaml</code>, <code>/favicon.ico</code>, <code>/static</code>)</td>
+</tr>
+<tr>
+<td><code>EmergencyMode</code></td>
+<td><code>bool</code></td>
+<td>Blocks everything except <code>EmergencyWhitelist</code></td>
+</tr>
+<tr>
+<td><code>EmergencyWhitelist</code></td>
+<td><code>[]string</code></td>
+<td>Allowed during emergency mode</td>
+</tr>
+</tbody>
+</table>
+<h2 id="redis">Redis</h2>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Default</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>EnableRedis</code></td>
+<td><code>bool</code></td>
+<td><code>true</code></td>
+<td>Required for distributed bans and rate limits</td>
+</tr>
+<tr>
+<td><code>RedisURL</code></td>
+<td><code>string</code></td>
+<td><code>redis://localhost:6379</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>RedisPrefix</code></td>
+<td><code>string</code></td>
+<td><code>guard_core:</code></td>
+<td>Key prefix</td>
+</tr>
+<tr>
+<td><code>RedisFailOpen</code></td>
+<td><code>bool</code></td>
+<td><code>false</code></td>
+<td>On Redis failure, allow traffic instead of blocking</td>
+</tr>
+</tbody>
+</table>
+<h2 id="ip-banning">IP banning</h2>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Default</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>EnableIPBanning</code></td>
+<td><code>bool</code></td>
+<td><code>true</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>AutoBanThreshold</code></td>
+<td><code>int</code></td>
+<td><code>10</code></td>
+<td>Violations before an auto-ban; must be &gt;= 1</td>
+</tr>
+<tr>
+<td><code>AutoBanDuration</code></td>
+<td><code>int</code></td>
+<td><code>3600</code></td>
+<td>Auto-ban length in seconds</td>
+</tr>
+<tr>
+<td><code>ThreatBanConfig</code></td>
+<td><code>map[string]ThreatBanEntry</code></td>
+<td>empty</td>
+<td>Per-category <code>{Threshold, Duration}</code> overrides</td>
+</tr>
+<tr>
+<td><code>EnableRateLimitAutoBan</code></td>
+<td><code>bool</code></td>
+<td><code>false</code></td>
+<td>Count rate-limit violations toward auto-ban</td>
+</tr>
+</tbody>
+</table>
+<h2 id="rate-limiting">Rate limiting</h2>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Default</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>EnableRateLimiting</code></td>
+<td><code>bool</code></td>
+<td><code>true</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>RateLimit</code></td>
+<td><code>int</code></td>
+<td><code>10</code></td>
+<td>Requests per window</td>
+</tr>
+<tr>
+<td><code>RateLimitWindow</code></td>
+<td><code>int</code></td>
+<td><code>60</code></td>
+<td>Window length in seconds</td>
+</tr>
+<tr>
+<td><code>EndpointRateLimits</code></td>
+<td><code>map[string]RateLimitEntry</code></td>
+<td>empty</td>
+<td>Exact-path overrides, key is the request path</td>
+</tr>
+</tbody>
+</table>
+<h2 id="penetration-detection">Penetration detection</h2>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Default</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>EnablePenetrationDetection</code></td>
+<td><code>bool</code></td>
+<td><code>true</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>EnabledDetectionCategories</code></td>
+<td><code>[]string</code></td>
+<td>all categories</td>
+<td>See <a href="../detection/">Detection</a></td>
+</tr>
+<tr>
+<td><code>ExcludedDetectionHeaders</code></td>
+<td><code>map[string]bool</code></td>
+<td>empty</td>
+<td>Header names skipped by detection</td>
+</tr>
+<tr>
+<td><code>ExcludedDetectionParams</code></td>
+<td><code>map[string]bool</code></td>
+<td>empty</td>
+<td>Query parameter names skipped</td>
+</tr>
+<tr>
+<td><code>ExcludedDetectionBodyFields</code></td>
+<td><code>map[string]bool</code></td>
+<td>empty</td>
+<td>JSON body fields skipped</td>
+</tr>
+<tr>
+<td><code>Detection</code></td>
+<td><code>Config</code></td>
+<td><code>DefaultConfig()</code></td>
+<td>Detector tuning (see below)</td>
+</tr>
+</tbody>
+</table>
+<h2 id="cloud-provider-blocking">Cloud provider blocking</h2>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Default</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>BlockCloudProviders</code></td>
+<td><code>[]string</code></td>
+<td>empty</td>
+<td>e.g. <code>AWS</code>, or <code>AWS:!us-east-1</code> to carve out a region</td>
+</tr>
+<tr>
+<td><code>CloudIPRefreshInterval</code></td>
+<td><code>int</code></td>
+<td><code>3600</code></td>
+<td>Seconds, clamped to <code>[60, 86400]</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="user-agents-headers-auth">User agents, headers, auth</h2>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>BlockedUserAgents</code></td>
+<td><code>[]string</code></td>
+<td>Regex patterns, validated with <code>regexp.Compile</code></td>
+</tr>
+<tr>
+<td><code>AuthVerifier</code></td>
+<td><code>AuthVerifier</code></td>
+<td><code>func(req, credential) (any, error)</code> used by <code>AuthRequired</code> routes</td>
+</tr>
+</tbody>
+</table>
+<h2 id="logging">Logging</h2>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Default</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>LogRequestLevel</code></td>
+<td><code>string</code></td>
+<td><code>INFO</code></td>
+<td>One of <code>INFO</code>, <code>DEBUG</code>, <code>WARNING</code>, <code>ERROR</code>, <code>CRITICAL</code></td>
+</tr>
+<tr>
+<td><code>LogSuspiciousLevel</code></td>
+<td><code>string</code></td>
+<td><code>WARNING</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MutedCheckLogs</code></td>
+<td><code>map[string]bool</code></td>
+<td>empty</td>
+<td>Check names whose logs are suppressed</td>
+</tr>
+<tr>
+<td><code>LogSensitiveHeaders</code></td>
+<td><code>map[string]bool</code></td>
+<td>empty</td>
+<td>Headers whose values are redacted</td>
+</tr>
+<tr>
+<td><code>LogSensitiveParams</code></td>
+<td><code>map[string]bool</code></td>
+<td>empty</td>
+<td>Params whose values are redacted</td>
+</tr>
+<tr>
+<td><code>LogSensitiveBodyFields</code></td>
+<td><code>map[string]bool</code></td>
+<td>empty</td>
+<td>Body fields whose values are redacted</td>
+</tr>
+</tbody>
+</table>
+<h2 id="custom-behavior">Custom behavior</h2>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>CustomErrorResponses</code></td>
+<td><code>map[int]string</code></td>
+<td>Status code to body message, used for every block verdict</td>
+</tr>
+<tr>
+<td><code>OnBlock</code></td>
+<td><code>func(req Request, payload map[string]any)</code></td>
+<td>Telemetry hook, see below</td>
+</tr>
+<tr>
+<td><code>CustomRequestCheck</code></td>
+<td><code>func(req Request) *Response</code></td>
+<td>Final user-defined gate; non-nil response blocks</td>
+</tr>
+<tr>
+<td><code>PassiveMode</code></td>
+<td><code>bool</code></td>
+<td>Log violations without blocking</td>
+</tr>
+<tr>
+<td><code>FailSecure</code></td>
+<td><code>bool</code></td>
+<td>Default <code>true</code>; fail-closed on internal errors</td>
+</tr>
+<tr>
+<td><code>RouteResolutionStrict</code></td>
+<td><code>bool</code></td>
+<td>Reject requests whose route cannot be resolved</td>
+</tr>
+</tbody>
+</table>
+<h3 id="the-onblock-hook">The OnBlock hook</h3>
+<p><code>OnBlock</code> is the single telemetry seam in this port. It fires for every block
+verdict with a payload containing <code>check_name</code>, <code>reason</code>, <code>trigger_info</code>,
+<code>passive_mode</code>, <code>client_ip</code>, <code>path</code>, <code>method</code>, and <code>status_code</code>.</p>
+<div class="highlight"><pre><span></span><code><span class="nx">cfg</span><span class="p">.</span><span class="nx">OnBlock</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kd">func</span><span class="p">(</span><span class="nx">req</span><span class="w"> </span><span class="nx">guardcore</span><span class="p">.</span><span class="nx">Request</span><span class="p">,</span><span class="w"> </span><span class="nx">payload</span><span class="w"> </span><span class="kt">map</span><span class="p">[</span><span class="kt">string</span><span class="p">]</span><span class="kt">any</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">log</span><span class="p">.</span><span class="nx">Printf</span><span class="p">(</span><span class="s">"blocked %s %s by %s: %s"</span><span class="p">,</span>
+<span class="w">        </span><span class="nx">payload</span><span class="p">[</span><span class="s">"method"</span><span class="p">],</span><span class="w"> </span><span class="nx">payload</span><span class="p">[</span><span class="s">"path"</span><span class="p">],</span><span class="w"> </span><span class="nx">payload</span><span class="p">[</span><span class="s">"check_name"</span><span class="p">],</span><span class="w"> </span><span class="nx">payload</span><span class="p">[</span><span class="s">"reason"</span><span class="p">])</span>
+<span class="p">}</span>
+</code></pre></div>
+<p>Hook panics are recovered and logged; they never affect the verdict.</p>
+<div class="admonition note">
+<p class="admonition-title">Agent wiring</p>
+<p>Guard Agent telemetry is not implemented in this port yet
+(<code>EnableAgent</code> is fail-closed and returns an unsupported-feature error).
+Until the agent event pipeline lands, forward <code>OnBlock</code> payloads to
+<a href="https://github.com/rennf93/guard-agent-go">guard-agent-go</a> from your own
+hook implementation. See <code>examples/advanced_app</code> for a worked example.</p>
+</div>
+<h2 id="detector-tuning">Detector tuning</h2>
+<div class="highlight"><pre><span></span><code><span class="nx">cfg</span><span class="p">.</span><span class="nx">Detection</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">guardcore</span><span class="p">.</span><span class="nx">Config</span><span class="p">{</span>
+<span class="w">    </span><span class="nx">CompilerTimeout</span><span class="p">:</span><span class="w">        </span><span class="mi">2</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="nx">time</span><span class="p">.</span><span class="nx">Second</span><span class="p">,</span>
+<span class="w">    </span><span class="nx">MaxContentLength</span><span class="p">:</span><span class="w">       </span><span class="mi">10000</span><span class="p">,</span>
+<span class="w">    </span><span class="nx">PreserveAttackPatterns</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">    </span><span class="nx">MaxBodyInspectBytes</span><span class="p">:</span><span class="w">    </span><span class="mi">262144</span><span class="p">,</span>
+<span class="w">    </span><span class="nx">SemanticThreshold</span><span class="p">:</span><span class="w">      </span><span class="mf">0.7</span><span class="p">,</span>
+<span class="w">    </span><span class="nx">ThreatScoreThreshold</span><span class="p">:</span><span class="w">   </span><span class="mf">1.0</span><span class="p">,</span>
+<span class="p">}</span>
+</code></pre></div>
+<h2 id="unsupported-fail-closed-options">Unsupported (fail-closed) options</h2>
+<p>Validation rejects configurations this port does not implement yet, rather
+than silently ignoring them:</p>
+<ul>
+<li><code>EnableDynamicRules</code></li>
+<li><code>EnableAgent</code></li>
+<li><code>EnableCORS</code></li>
+<li><code>WhitelistCountries</code> / <code>BlockedCountries</code> (GeoIP is not ported)</li>
+<li><code>GlobalBehaviorRules</code></li>
+</ul>
+<p>Each returns an <code>*UnsupportedFeatureError</code> from <code>Validate()</code>. See
+<a href="../roadmap/">Roadmap</a> for the full divergence list.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["content.code.copy", "navigation.sections"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>
