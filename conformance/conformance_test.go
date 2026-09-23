@@ -164,7 +164,7 @@ func shortPattern(p any) string {
 }
 
 func TestConformance(t *testing.T) {
-	files, err := filepath.Glob("guard-core-spec-4.0.2/cases/*.json")
+	files, err := filepath.Glob("guard-core-spec-4.0.3/cases/*.json")
 	if err != nil {
 		t.Fatal(err)
 	}

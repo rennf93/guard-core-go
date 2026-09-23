@@ -1,7 +1,7 @@
 # Conformance
 
 The `conformance/` directory holds a fixture-driven parity suite: JSON cases
-generated from the Python `guard-core` engine (spec 4.0.2) and replayed through
+generated from the Python `guard-core` engine (spec 4.0.3) and replayed through
 `guardcore.Detect` here.
 
 ## Suites
