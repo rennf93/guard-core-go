@@ -49,10 +49,16 @@ func findAllStrings(re *regexp2.Regexp, s string) []string {
 		if err != nil || m == nil {
 			break
 		}
+		if m.Index < pos {
+			// Defensive: skip stale matches behind the scan start so the
+			// loop always progresses (see findAllMatches).
+			pos++
+			continue
+		}
 		out = append(out, m.String())
 		next := m.Index + m.Length
-		if next == pos {
-			next++
+		if next <= pos {
+			next = pos + 1
 		}
 		pos = next
 	}
@@ -340,6 +346,12 @@ func buildShortBase64AdditiveView(normalize func(string) string, truncate func(s
 		if err != nil || m == nil {
 			break
 		}
+		if m.Index < pos {
+			// Defensive: skip stale matches behind the scan start so the
+			// loop always progresses (see findAllMatches).
+			pos++
+			continue
+		}
 		attempts++
 		if attempts > shortBase64MaxCandidates {
 			break
@@ -348,8 +360,8 @@ func buildShortBase64AdditiveView(normalize func(string) string, truncate func(s
 			fragments = append(fragments, decoded)
 		}
 		pos = m.Index + m.Length
-		if m.Length == 0 {
-			pos++
+		if pos <= m.Index || m.Length == 0 {
+			pos = m.Index + 1
 		}
 	}
 	out := ""

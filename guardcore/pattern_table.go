@@ -68,7 +68,7 @@ var patternTable = []patternDef{
 	{Pattern: "\\[\\s*[\\\"']eval[\\\"']\\s*\\]\\s*\\(\\s*[\\\"']", Contexts: []string{"header", "query_param", "request_body", "unknown"}, Category: "cmd_injection"},
 	{Pattern: "(?:\\.\\s*constructor|\\[\\s*[\\\"']constructor[\\\"']\\s*\\])\\s*(?:\\.\\s*constructor|\\[\\s*[\\\"']constructor[\\\"']\\s*\\])\\s*\\(\\s*[\\\"']", Contexts: []string{"header", "query_param", "request_body", "unknown"}, Category: "cmd_injection"},
 	{Pattern: "\\b(?:setTimeout|setInterval)\\s*\\(\\s*[\\\"']", Contexts: []string{"header", "query_param", "request_body", "unknown"}, Category: "cmd_injection"},
-	{Pattern: "[;|&]\\s*(?:ls|cat|rm|id|whoami|uname|wget|curl|nc|netcat|socat|bash|sh|python|perl)\\b", Contexts: []string{"header", "query_param", "request_body", "unknown"}, Category: "cmd_injection"},
+	{Pattern: shellKeywordCommandSource, Contexts: []string{"header", "query_param", "request_body", "unknown"}, Category: "cmd_injection"},
 	{Pattern: "(?i)\\b(?:nc|netcat|ncat)\\s+-[a-z]*e\\b|/dev/tcp/\\d", Contexts: []string{"header", "query_param", "request_body", "unknown"}, Category: "cmd_injection"},
 	{Pattern: "(?:\\A|[;&|]\\s*|\\$\\()\\{[^{}\\s,:'\\\"][^{},:'\\\"]*(?:,(?:[^{}\\s,:'\\\"][^{},:'\\\"]*)?)+\\}", Contexts: []string{"header", "query_param", "request_body", "unknown"}, Category: "cmd_injection"},
 	{Pattern: "\\w+(?:['\\\"]+\\w+){1,10}", Contexts: []string{"header", "query_param", "request_body", "unknown"}, Category: "cmd_injection"},

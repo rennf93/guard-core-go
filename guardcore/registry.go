@@ -109,7 +109,10 @@ var candidateValidators map[string]func(m rmatch, context string) bool
 
 func init() {
 	windowedFinders = map[string]windowedFinderFunc{
-		cmdNewlineShellDashCSource: cmdInjectionShellDashCFinditer,
+		cmdNewlineShellDashCSource:             cmdInjectionShellDashCFinditer,
+		gluedBacktickCandidateSource:           gluedBacktickCandidateFinditer,
+		gluedDollarSubstitutionCandidateSource: gluedDollarSubstitutionCandidateFinditer,
+		ldapParenConjunctionSource:             ldapParenConjunctionFinditer,
 		ldapNullByteAttrSource: func(t scanText) []rmatch {
 			return ldapNullByteAttrFinditer(t, ldapNullByteAttrCompiled, ldapNullByteTailRE)
 		},
@@ -199,6 +202,9 @@ func checkRegexPatterns(t scanText, context string, enabledCategories map[string
 		validatorContext = normalized + embeddedJSONLeafContextSuffix
 	}
 	skipFilter := normalized == "unknown" || normalized == "request_body"
+	// Built once per scanned string (O(n)); the density query is O(1) per
+	// match (guard-core 4.0.3 binary noise gate).
+	prefix := buildBinaryPrefix(t)
 
 	for _, p := range globalPatterns {
 		if patternExcludedFromView(p.source, mode) {
@@ -210,7 +216,7 @@ func checkRegexPatterns(t scanText, context string, enabledCategories map[string
 		if enabledCategories != nil && p.category != "custom" && !enabledCategories[p.category] {
 			continue
 		}
-		threat, timeoutOccurred := checkRegexPattern(&p, t, validatorContext)
+		threat, timeoutOccurred := checkRegexPattern(&p, t, validatorContext, prefix)
 		if timeoutOccurred {
 			timeouts = append(timeouts, p.source)
 			if threat == nil {
@@ -225,28 +231,28 @@ func checkRegexPatterns(t scanText, context string, enabledCategories map[string
 	return threats, matched, timeouts
 }
 
-func firstAcceptedThreat(p *compiledPattern, matches []rmatch, validatorContext string) map[string]any {
+func firstAcceptedThreat(p *compiledPattern, matches []rmatch, validatorContext string, prefix binaryPrefix) map[string]any {
 	for _, m := range matches {
 		m.re = p.re
-		if threat := buildRegexThreat(p, m, validatorContext); threat != nil {
+		if threat := buildRegexThreat(p, m, validatorContext, prefix); threat != nil {
 			return threat
 		}
 	}
 	return nil
 }
 
-func checkRegexPattern(p *compiledPattern, t scanText, validatorContext string) (map[string]any, bool) {
+func checkRegexPattern(p *compiledPattern, t scanText, validatorContext string, prefix binaryPrefix) (map[string]any, bool) {
 	if finder, ok := windowedFinders[p.source]; ok {
-		return firstAcceptedThreat(p, finder(t), validatorContext), false
+		return firstAcceptedThreat(p, finder(t), validatorContext, prefix), false
 	}
 	if fn, ok := scanWindowMatcherFuncs[p.source]; ok {
-		return firstAcceptedThreat(p, fn(t), validatorContext), false
+		return firstAcceptedThreat(p, fn(t), validatorContext, prefix), false
 	}
 	if _, ok := scanWindowBoundsCompiled[p.source]; ok {
-		return firstAcceptedThreat(p, iterScanWindowMatches(p, t), validatorContext), false
+		return firstAcceptedThreat(p, iterScanWindowMatches(p, t), validatorContext, prefix), false
 	}
 	matches, timeout := safeFindAll(p, t)
-	threat := firstAcceptedThreat(p, matches, validatorContext)
+	threat := firstAcceptedThreat(p, matches, validatorContext, prefix)
 	return threat, timeout
 }
 
@@ -254,12 +260,18 @@ func safeFindAll(p *compiledPattern, t scanText) ([]rmatch, bool) {
 	var out []rmatch
 	pos := 0
 	for pos <= t.n {
-		m, err := p.re.FindStringMatchStartingAt(t.s, pos)
+		m, err := p.re.FindRunesMatchStartingAt(t.rs, pos)
 		if err != nil {
 			return out, true
 		}
 		if m == nil {
 			break
+		}
+		if m.Index < pos {
+			// Defensive: keep the scan monotonic even if the engine
+			// reports a match behind the requested start.
+			pos++
+			continue
 		}
 		g1 := ""
 		if g := m.GroupByNumber(1); g != nil && len(g.Captures) > 0 {
@@ -272,19 +284,25 @@ func safeFindAll(p *compiledPattern, t scanText) ([]rmatch, bool) {
 		if m.Length == 0 {
 			next++
 		}
-		if next == pos {
-			next++
+		if next <= pos {
+			next = pos + 1
 		}
 		pos = next
 	}
 	return out, false
 }
 
-func buildRegexThreat(p *compiledPattern, m rmatch, validatorContext string) map[string]any {
+func buildRegexThreat(p *compiledPattern, m rmatch, validatorContext string, prefix binaryPrefix) map[string]any {
 	if validator, ok := candidateValidators[p.source]; ok {
 		if !validator(m, validatorContext) {
 			return nil
 		}
+	}
+	// Binary noise gate: after the candidate rejection validators, discard
+	// matches from the noise-prone registry when the surrounding window is
+	// binary-content dense. Signature patterns are never gated.
+	if noisePronePatternSources[p.source] && binaryNoiseGateEnabled && prefix.matchIsBinaryDense(m.start(), m.end()) {
+		return nil
 	}
 	return map[string]any{
 		"type":     "regex",

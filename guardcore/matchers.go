@@ -346,3 +346,147 @@ func floorMax(f int) int {
 	}
 	return f
 }
+
+// The three finders below mirror the Python engine's plain regex scans for
+// sources that regexp2 catastrophically backtracks on (binary-noise bodies hit
+// the 2s MatchTimeout and produced pattern_timeout threats where Python's re
+// module completes in milliseconds). Each finder reproduces the regex match
+// semantics exactly, with linear scans instead of backtracking.
+
+// gluedBacktickCandidateFinditer mirrors
+// (?<!`)`(?:[A-Za-z0-9_./~]|\$[({])(?:[^`\\\n]|\\.)*`
+func gluedBacktickCandidateFinditer(t scanText) []rmatch {
+	var out []rmatch
+	rs := t.rs
+	i := 0
+	for i < t.n {
+		if rs[i] != '`' || (i > 0 && rs[i-1] == '`') {
+			i++
+			continue
+		}
+		end, ok := scanBacktickCandidateBody(rs, i)
+		if !ok {
+			i++
+			continue
+		}
+		out = append(out, matchFromIndices(t, i, end, ""))
+		i = end
+	}
+	return out
+}
+
+func scanBacktickCandidateBody(rs []rune, open int) (int, bool) {
+	n := len(rs)
+	j := open + 1
+	if j >= n {
+		return 0, false
+	}
+	c := rs[j]
+	if isWordRune(c) || c == '.' || c == '/' || c == '~' {
+		j++
+	} else if c == '$' && j+1 < n && (rs[j+1] == '(' || rs[j+1] == '{') {
+		j += 2
+	} else {
+		return 0, false
+	}
+	for j < n {
+		c := rs[j]
+		if c == '`' {
+			return j + 1, true
+		}
+		if c == '\n' {
+			return 0, false
+		}
+		if c == '\\' {
+			if j+1 < n && rs[j+1] != '\n' {
+				j += 2
+				continue
+			}
+			return 0, false
+		}
+		j++
+	}
+	return 0, false
+}
+
+// gluedDollarSubstitutionCandidateFinditer mirrors
+// \$\((?:[^()\\\n]|\\.)*\)|\$\{(?:[^{}\\\n]|\\.)*\}
+func gluedDollarSubstitutionCandidateFinditer(t scanText) []rmatch {
+	var out []rmatch
+	rs := t.rs
+	i := 0
+	for i < t.n {
+		if rs[i] != '$' || i+1 >= t.n {
+			i++
+			continue
+		}
+		var closeRune, twin rune
+		switch rs[i+1] {
+		case '(':
+			closeRune, twin = ')', '('
+		case '{':
+			closeRune, twin = '}', '{'
+		default:
+			i++
+			continue
+		}
+		end, ok := scanDollarSubstitutionBody(rs, i+2, closeRune, twin)
+		if !ok {
+			i++
+			continue
+		}
+		out = append(out, matchFromIndices(t, i, end, ""))
+		i = end
+	}
+	return out
+}
+
+func scanDollarSubstitutionBody(rs []rune, j int, closeRune, twin rune) (int, bool) {
+	n := len(rs)
+	for j < n {
+		c := rs[j]
+		if c == closeRune {
+			return j + 1, true
+		}
+		if c == '\n' || c == twin {
+			return 0, false
+		}
+		if c == '\\' {
+			if j+1 < n && rs[j+1] != '\n' {
+				j += 2
+				continue
+			}
+			return 0, false
+		}
+		j++
+	}
+	return 0, false
+}
+
+// ldapParenConjunctionFinditer mirrors \(\s*[&|]\s*
+func ldapParenConjunctionFinditer(t scanText) []rmatch {
+	var out []rmatch
+	rs := t.rs
+	i := 0
+	for i < t.n {
+		if rs[i] != '(' {
+			i++
+			continue
+		}
+		j := i + 1
+		for j < t.n && isSpaceRune(rs[j]) {
+			j++
+		}
+		if j >= t.n || (rs[j] != '&' && rs[j] != '|') {
+			i++
+			continue
+		}
+		j++
+		for j < t.n && isSpaceRune(rs[j]) {
+			j++
+		}
+		out = append(out, matchFromIndices(t, i, j, ""))
+		i = j
+	}
+	return out
+}

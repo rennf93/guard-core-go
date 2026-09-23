@@ -147,9 +147,18 @@ func findAllMatches(re *regexp2.Regexp, t scanText) []rmatch {
 	pos := 0
 	n := t.n
 	for pos <= n {
-		m, err := re.FindStringMatchStartingAt(t.s, pos)
+		// Runes API: Match.Index is a rune index, so the scan position and
+		// match spans share one coordinate system (Python parity: code
+		// point indices) and the subject is not re-encoded per call.
+		m, err := re.FindRunesMatchStartingAt(t.rs, pos)
 		if err != nil || m == nil {
 			break
+		}
+		if m.Index < pos {
+			// Defensive: keep the scan monotonic even if the engine
+			// reports a match behind the requested start.
+			pos++
+			continue
 		}
 		g1 := ""
 		if g := m.GroupByNumber(1); g != nil && len(g.Captures) > 0 {
@@ -160,8 +169,8 @@ func findAllMatches(re *regexp2.Regexp, t scanText) []rmatch {
 		if m.Length == 0 {
 			next++
 		}
-		if next == pos {
-			next++
+		if next <= pos {
+			next = pos + 1
 		}
 		pos = next
 	}
@@ -172,8 +181,13 @@ func findFirstAt(re *regexp2.Regexp, t scanText, start, ceiling int) (rmatch, bo
 	if start >= ceiling || start < 0 {
 		return rmatch{}, false
 	}
-	subject := t.str(0, ceiling)
-	m, err := re.FindStringMatchStartingAt(subject, start)
+	if ceiling > len(t.rs) {
+		ceiling = len(t.rs)
+	}
+	if start >= ceiling {
+		return rmatch{}, false
+	}
+	m, err := re.FindRunesMatchStartingAt(t.rs[:ceiling], start)
 	if err != nil || m == nil || m.Index != start {
 		return rmatch{}, false
 	}
@@ -188,7 +202,7 @@ func searchFrom(re *regexp2.Regexp, t scanText, start int) (rmatch, bool) {
 	if start > t.n {
 		return rmatch{}, false
 	}
-	m, err := re.FindStringMatchStartingAt(t.s, start)
+	m, err := re.FindRunesMatchStartingAt(t.rs, start)
 	if err != nil || m == nil {
 		return rmatch{}, false
 	}
