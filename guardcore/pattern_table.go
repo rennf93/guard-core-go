@@ -41,7 +41,7 @@ var patternTable = []patternDef{
 	{Pattern: "(?i)(?:\\A|[;'\\\"])\\s*EXEC(?:UTE)?\\s+(?:xp_\\w+|sp_\\w+)", Contexts: []string{"header", "query_param", "request_body", "unknown", "url_path"}, Category: "sqli"},
 	{Pattern: "(?i)\\bORDER\\s+BY\\s+\\d+\\s*(?:--|#|;|\\)|,|/\\*|\\Z)|(?<=[=?&])ORDER\\s+BY\\s+\\d+\\s*\\n", Contexts: []string{"query_param", "request_body", "unknown"}, Category: "sqli"},
 	{Pattern: "(?i)(?:['\\\")\\d]|/\\*)\\s{0,3}\\bORDER\\s+BY\\s+\\d+|\\bORDER\\s+BY\\s+\\d+\\s*(?:--|#|/\\*)", Contexts: []string{"header", "query_param", "request_body", "unknown", "url_path"}, Category: "sqli"},
-	{Pattern: "'\\s*(?:[\\);]+\\s*)?--|'[\\);]*#(?:\\n|\\Z)", Contexts: []string{"header", "query_param", "request_body", "unknown", "url_path"}, Category: "sqli"},
+	{Pattern: sqliCommentTerminatorSource, Contexts: []string{"header", "query_param", "request_body", "unknown", "url_path"}, Category: "sqli"},
 	{Pattern: "(?i)\\bWAITFOR\\s+(?:DELAY|TIME)\\s+'\\d{1,2}:\\d{1,2}:\\d{1,2}(?:\\.\\d+)?'", Contexts: []string{"header", "query_param", "request_body", "unknown", "url_path"}, Category: "sqli"},
 	{Pattern: "(?:\\.\\.\\/|\\.\\.\\\\)(?:\\.\\.\\/|\\.\\.\\\\)+", Contexts: []string{"header", "query_param", "request_body", "unknown", "url_path"}, Category: "dir_traversal"},
 	{Pattern: "\\A(?:(?!\\n).)*etc/(?:passwd|shadow|group|hosts|motd|issue|mysql/my\\.cnf|ssh/ssh_config)(?:[&#;,\\\"'<>]|\\s*\\Z)", Contexts: []string{"header", "query_param", "request_body", "unknown", "url_path"}, Category: "dir_traversal"},

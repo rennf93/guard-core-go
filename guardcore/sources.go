@@ -34,4 +34,5 @@ const (
 	pickleGlobalGenericSource              = "(c[A-Za-z_][A-Za-z0-9_]{0,100}(?:\\.[A-Za-z_][A-Za-z0-9_]{0,100}){0,20}\\n[A-Za-z_][A-Za-z0-9_]{0,100}\\n)[^ \\t]{0,100}?[Rb]"
 	embeddedJSONLeafContextSuffix          = ":embedded_json"
 	log4shellJNDILookupSource              = "(?i)\\$\\{(?:jndi:(?:ldap|rmi|dns)://|\\$?\\{?(?:lower|upper):j\\}ndi|::-j\\}ndi)"
+	sqliCommentTerminatorSource            = "'\\s*(?:[\\);]+\\s*)?--|'[\\);]*#(?:\\n|\\Z)"
 )
