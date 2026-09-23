@@ -85,3 +85,34 @@ jobs:
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest
           govulncheck ./...
+
+  gates:
+    name: Gates (docker golang:1.25-alpine)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # No host Go: gofmt, go vet, and go build run inside golang:1.25-alpine.
+      # ./... covers the engine and the examples/ apps, which live in the
+      # root module (see examples/advanced_app/README.md).
+      - name: gofmt, go vet, go build (engine + examples)
+        run: |
+          docker run --rm \
+            -v "$PWD":/work -w /work \
+            -e GOCACHE=/tmp/gocache \
+            golang:1.25-alpine sh -c '
+              set -e
+              unformatted=$(gofmt -l .)
+              if [ -n "$unformatted" ]; then
+                echo "gofmt needed on:"
+                echo "$unformatted"
+                exit 1
+              fi
+              go vet ./...
+              go build ./...
+            '
