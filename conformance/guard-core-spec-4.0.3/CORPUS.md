@@ -89,3 +89,23 @@ uv run python specs/fixtures/tools/run_fixtures.py
 Curating inputs: edit the suite lists in `generate_fixtures.py`, regenerate,
 then re-run the runner to confirm determinism. Expected values always come
 from the engine.
+
+## spec 4.0.3 additions
+
+`binary_bodies.json` pins the binary-body noise gate (upstream commit
+436d6f72): a zip-like binary blob produces zero threats, noise-prone matches
+inside artifact-dense padding are discarded, and attacks hidden in binary
+padding (padded webshell, pickle opcode stream, base64-fragmented multipart
+part with a filename signature) are still caught, as are pure-text, accented
+and non-Latin controls. The pure random-noise views from the upstream payload
+constants are covered by each port's in-repo honesty test suite rather than
+this corpus: full-entropy noise stress-tests decoder pipelines far outside
+the noise gate, where the ports still carry pre-existing decoder divergences
+(tracked separately).
+
+Surrogateescape-decoded views are stored with surrogate code points mapped to
+U+FFFD: JSON cannot carry lone surrogates (PHP json_decode rejects them, Go
+maps them to U+FFFD), the ports' adapters deliver those bytes as U+FFFD
+replacement characters anyway, and both code point classes are artifact
+characters with one code point each, so verdicts, code point lengths and gate
+decisions are identical on both representations.

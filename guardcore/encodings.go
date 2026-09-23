@@ -14,7 +14,7 @@ var hexEscapeRE = regexp.MustCompile(`\\x([0-9a-fA-F]{2})`)
 var unicodeEscapeRE = regexp.MustCompile(`\\u([0-9a-fA-F]{4})`)
 var percentUEscapeRE = regexp.MustCompile(`(?i)%u([0-9a-fA-F]{4})`)
 var percentByteRunRE = regexp.MustCompile(`(?:%[0-9a-fA-F]{2})+`)
-var ldapHexEscapeRE = regexp2.MustCompile(`\\([0-9a-fA-F]{2})`, 0)
+var ldapHexEscapeStdRE = regexp.MustCompile(`\\([0-9a-fA-F]{2})`)
 
 type overlongLeadSpec struct {
 	length  int
@@ -145,25 +145,40 @@ func decodeOverlongUTF8PercentRuns(content string) string {
 }
 
 func urlUnquote(content string) string {
-	var raw []byte
-	for i := 0; i < len(content); {
+	// Parity with Python's urllib.parse.unquote(content, errors="ignore"):
+	// literal characters pass through untouched (they are never routed
+	// through the byte decoder, so invalid bytes cannot be dropped from
+	// between a '%' and later hex digits, which would fabricate new escape
+	// sequences and keep the decode loop mutating). Only contiguous %xx
+	// byte runs are percent-decoded and UTF-8 decoded with invalid bytes
+	// ignored.
+	var b strings.Builder
+	i := 0
+	for i < len(content) {
 		c := content[i]
 		if c != '%' {
-			raw = append(raw, content[i:i+utf8Len(content[i:])]...)
-			i += utf8Len(content[i:])
+			sz := utf8Len(content[i:])
+			b.WriteString(content[i : i+sz])
+			i += sz
 			continue
 		}
-		if i+2 < len(content) {
-			if v, err := parseHex2(content[i+1 : i+3]); err == nil {
-				raw = append(raw, byte(v))
-				i += 3
-				continue
+		var raw []byte
+		for i+3 <= len(content) && content[i] == '%' {
+			v, err := parseHex2(content[i+1 : i+3])
+			if err != nil {
+				break
 			}
+			raw = append(raw, byte(v))
+			i += 3
 		}
-		raw = append(raw, '%')
-		i++
+		if len(raw) > 0 {
+			b.WriteString(decodeUTF8Ignore(raw))
+		} else {
+			b.WriteByte('%')
+			i++
+		}
 	}
-	return decodeUTF8Ignore(raw)
+	return b.String()
 }
 
 func utf8Len(b string) int {
@@ -194,23 +209,18 @@ func htmlUnescape(content string) string {
 }
 
 func decodeLDAPHexEscapes(content string) string {
-	out := ""
-	pos := 0
-	for {
-		m, err := ldapHexEscapeRE.FindStringMatchStartingAt(content, pos)
-		if err != nil || m == nil {
-			break
+	// Go std regexp is byte-safe (Python parity: re.sub on str). The
+	// regexp2 Match.Index is a rune index and must never be used to slice
+	// the input by bytes; doing so split multi-byte characters into
+	// invalid bytes, which recombined into new escape sequences and kept
+	// the decode loop mutating on binary content.
+	return ldapHexEscapeStdRE.ReplaceAllStringFunc(content, func(m string) string {
+		sub := ldapHexEscapeStdRE.FindStringSubmatch(m)
+		if v, err := parseHex2(sub[1]); err == nil {
+			return string(rune(v))
 		}
-		v, cerr := parseHex2(m.GroupByNumber(1).String())
-		if cerr == nil {
-			out += content[pos:m.Index] + string(rune(v))
-		} else {
-			out += content[pos : m.Index+m.Length]
-		}
-		pos = m.Index + m.Length
-	}
-	out += content[pos:]
-	return out
+		return m
+	})
 }
 
 var lookalikeMap = map[rune]string{
@@ -296,22 +306,32 @@ func removeExcessiveWhitespace(content string) string {
 
 func stripSQLComments(content string) string {
 	re := regexp2.MustCompile(`(?<!\w)/\*(?!!)(.*?)\*/|/\*(?!!)(.*?)\*/(?!\w)`, regexp2.Singleline)
-	out := ""
+	// Runes API: Match.Index is a rune index; slicing the byte string with
+	// rune offsets split multi-byte characters on binary content.
+	rs := []rune(content)
+	out := make([]rune, 0, len(rs))
 	pos := 0
 	for {
-		m, err := re.FindStringMatchStartingAt(content, pos)
+		m, err := re.FindRunesMatchStartingAt(rs, pos)
 		if err != nil || m == nil {
 			break
+		}
+		if m.Index < pos || m.Index+m.Length > len(rs) {
+			// Defensive: keep the scan monotonic.
+			pos++
+			continue
 		}
 		body := m.GroupByNumber(1)
 		if body == nil || len(body.Captures) == 0 {
 			body = m.GroupByNumber(2)
 		}
-		repl := " " + body.String() + " "
-		out += content[pos:m.Index] + repl
+		out = append(out, rs[pos:m.Index]...)
+		out = append(out, ' ')
+		out = append(out, []rune(body.String())...)
+		out = append(out, ' ')
 		pos = m.Index + m.Length
 	}
-	out += content[pos:]
+	out = append(out, rs[pos:]...)
 	lineRE := regexp.MustCompile(`--|#`)
-	return lineRE.ReplaceAllString(out, " ")
+	return lineRE.ReplaceAllString(string(out), " ")
 }
