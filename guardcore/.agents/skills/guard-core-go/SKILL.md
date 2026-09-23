@@ -7,8 +7,8 @@ description: Use when working in the guard-core-go repository or consuming the g
 
 ## Quick Reference
 
-- Module: `github.com/rennf93/guard-core-go` (go.mod `go 1.25.0`); package import path: `github.com/rennf93/guard-core-go/guardcore`.
-- Library only: no `package main`, no binary, no Makefile. Shipped tag: `v0.1.0` (early port, expect API movement).
+- Module: `github.com/rennf93/guard-core-go/v4` (go.mod `go 1.25.0`); package import path: `github.com/rennf93/guard-core-go/v4/guardcore`.
+- Library only: no `package main`, no binary, no Makefile. Shipped tag: `v4.0.4` (versioned to track the Python guard-core engine).
 - Entry points: `NewSecurityConfig(mutate)` for config, `NewEngine(cfg)` for the facade, `guardcore.Detect(content, ip, context)` for raw content detection.
 - Test layers: `go test ./...` (unit + conformance), `REDIS_HOST=127.0.0.1 go test -tags integration ./...` (Redis integration), `go test -tags interop ./guardcore -run TestInteropRunner` (Python cross-implementation harness).
 - CI gates: `gofmt -l .` must print nothing, `go vet ./...`, `govulncheck ./...`, unit and Redis integration tests on Go 1.25.x and 1.26.x (`.github/workflows/ci.yml`).
@@ -16,7 +16,7 @@ description: Use when working in the guard-core-go repository or consuming the g
 ## Installation
 
 ```
-go get github.com/rennf93/guard-core-go@v0.1.0
+go get github.com/rennf93/guard-core-go/v4@v4.0.4
 ```
 
 Direct dependencies pulled in (go.mod): `github.com/dlclark/regexp2` (timeout-guarded regex engine), `github.com/redis/go-redis/v9` (optional Redis state), `golang.org/x/text` (unicode normalization). Redis is a runtime dependency only when `EnableRedis` is true; without Redis the engine still detects threats, enforces whitelist/blacklist, and fails cloud caches open.

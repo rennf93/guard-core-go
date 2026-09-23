@@ -38,7 +38,7 @@ adapter repositories above; each adapter translates native requests into
 ## Installation
 
 ```bash
-go get github.com/rennf93/guard-core-go@v0.1.0
+go get github.com/rennf93/guard-core-go/v4@v4.0.4
 ```
 
 Requires Go 1.25 or later.
@@ -51,7 +51,7 @@ package main
 import (
     "log"
 
-    "github.com/rennf93/guard-core-go/guardcore"
+    "github.com/rennf93/guard-core-go/v4/guardcore"
 )
 
 func main() {

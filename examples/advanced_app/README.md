@@ -73,7 +73,7 @@ curl -s -X POST http://localhost/admin/unban -H 'X-Admin-Token: admin-token-chan
 ## Module layout note
 
 Both example apps live inside the root module
-(`github.com/rennf93/guard-core-go/examples/...`) rather than in separate Go
+(`github.com/rennf93/guard-core-go/v4/examples/...`) rather than in separate Go
 modules or a `go.work` workspace. Rationale: the examples pin the exact engine
 they document (same module, same commit), so `go vet ./...` and
 `go build ./...` gate them together with the engine in CI and the Dockerfiles

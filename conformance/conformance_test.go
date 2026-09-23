@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/rennf93/guard-core-go/guardcore"
+	"github.com/rennf93/guard-core-go/v4/guardcore"
 )
 
 type caseFile struct {
