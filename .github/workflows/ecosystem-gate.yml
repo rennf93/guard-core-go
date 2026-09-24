@@ -67,7 +67,7 @@ jobs:
           path: ${{ matrix.consumer.path }}
 
       # No host Go toolchain: run the consumer suite inside golang:1.25-alpine,
-      # pointing the adapter's guard-core-go dependency at this checkout.
+      # pointing the adapter's guard-core-go/v4 dependency at this checkout.
       - name: Run the consumer test suite against this guard-core-go checkout
         run: |
           docker run --rm --network host \
@@ -78,7 +78,7 @@ jobs:
             golang:1.25-alpine sh -c '
               set -e
               cd "$CONSUMER_PATH"
-              go mod edit -replace github.com/rennf93/guard-core-go=/work/guard-core-go
+              go mod edit -replace github.com/rennf93/guard-core-go/v4=/work/guard-core-go
               go mod tidy
               go test ./...
               go test -tags integration ./...
