@@ -39,11 +39,10 @@ var reconProbePaths = []string{
 	"/README.md",
 }
 
-// Note on the Python vector "\default": this port's main-view preprocessor
-// decodes LDAP-style hex escapes ("\de" -> U+00DE), so "\default" never
-// reaches the recon row in the only view that carries it, independent of the
-// leading-separator gate (pre-existing divergence, deferred). The gate's
-// backslash acceptance is pinned at the buildRegexThreat level below.
+// The Python "\default" vector detects since the raw-view recon scan
+// (recon_raw_view_scan_test.go): the main-view preprocessor folds LDAP-style
+// hex escapes ("\de" -> U+00DE), but the recon rows also run on the
+// signal-preserving raw view that keeps the backslashes intact.
 
 // reconValueContexts are the value contexts of the Python request fixtures:
 // a query parameter, a JSON body field, a form body field, and a JSON value

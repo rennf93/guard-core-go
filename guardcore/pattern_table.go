@@ -194,6 +194,24 @@ var reconOptionalSeparatorPatternSources = func() map[string]bool {
 	return sources
 }()
 
+// reconRawViewPatternSources mirrors DETECTION_RECON_RAW_VIEW_PATTERN_SOURCES
+// from guard_core/handlers/_suspatterns_pattern_table.py: every recon row is
+// additionally scanned against the signal-preserving raw view. The processed
+// views fold LDAP hex escapes ("\de" -> U+00DE) before the pattern tables
+// run, so separator-prefixed probes such as "\default" or "\report.asp"
+// never reach a recon row there; the raw view keeps them intact and the
+// leading-separator gate still decides which matches are probes, so bare
+// words stay innocent exactly as on the processed views.
+var reconRawViewPatternSources = func() map[string]bool {
+	sources := make(map[string]bool)
+	for _, def := range patternTable {
+		if def.Category == "recon" {
+			sources[def.Pattern] = true
+		}
+	}
+	return sources
+}()
+
 var rawViewSources = map[string]bool{
 	"#\\{(?![^\\}]*\\d{4}-\\d{1,2}-\\d{1,2}(?!\\d))(?=[^\\}]*(?:@[\\w.]+@|\\b\\w+\\s*\\(|['\\\"]?\\d+['\\\"]?\\s*[*/%+\\-]\\s*['\\\"]?\\d+['\\\"]?))[^\\}]*\\}": true,
 	"'\\s*(?:[\\);]+\\s*)?--|'[\\);]*#(?:\\n|\\Z)":                                          true,

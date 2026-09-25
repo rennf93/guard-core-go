@@ -49,13 +49,19 @@ const (
 
 func isRawViewPattern(source string) bool        { return rawViewSources[source] }
 func isURLDecodedViewPattern(source string) bool { return urlDecodedViewSources[source] }
+func isReconRawViewPattern(source string) bool   { return reconRawViewPatternSources[source] }
 
 func patternExcludedFromView(source string, mode viewMode) bool {
 	isRaw := isRawViewPattern(source)
 	isURL := isURLDecodedViewPattern(source)
+	// Recon rows also run on the raw view: the processed views fold LDAP hex
+	// escapes before the pattern tables run, so separator-prefixed probes
+	// such as "\default" only survive there (guard-core upstream
+	// fix/raw-view-recon-scan, DETECTION_RECON_RAW_VIEW_PATTERN_SOURCES).
+	isReconRaw := isReconRawViewPattern(source)
 	switch mode {
 	case viewRaw:
-		return isURL || !isRaw
+		return isURL || !(isRaw || isReconRaw)
 	case viewURLDecoded:
 		return isRaw || !isURL
 	case viewMain:
