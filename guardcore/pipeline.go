@@ -232,18 +232,19 @@ func detectThreat(req Request, cfg *SecurityConfig) ([]string, string) {
 		enabled[category] = true
 	}
 	type value struct {
-		content string
-		context string
+		content        string
+		context        string
+		forcedCategory string
 	}
 	var values []value
 	if path := req.URLPath(); path != "" {
-		values = append(values, value{path, "url_path"})
+		values = append(values, value{path, "url_path", ""})
 	}
 	for key, v := range req.QueryParams() {
 		if cfg.ExcludedDetectionParams[strings.ToLower(key)] {
 			continue
 		}
-		values = append(values, value{v, "query_param"})
+		values = append(values, value{v, "query_param", ""})
 	}
 	headers := req.Headers()
 	for name := range headers.Map() {
@@ -251,12 +252,24 @@ func detectThreat(req Request, cfg *SecurityConfig) ([]string, string) {
 			continue
 		}
 		if hv, ok := headers.Get(name); ok && hv != "" {
-			values = append(values, value{hv, "header"})
+			values = append(values, value{hv, "header", ""})
 		}
 	}
-	var keys []string
-	_ = keys
+	// Body surface (guard-core 4.0.4 parity): the capped body is extracted
+	// into form fields, multipart parts (binary-dense file parts reduced to
+	// printable islands), JSON walk leaves, or one whole-value blob and each
+	// value is scanned with its context, after the whole request surface
+	// exactly like the reference.
+	bodyValues := extractRequestBodyValues(req, cfg)
+	for _, v := range bodyValues {
+		values = append(values, value{v.content, v.context, v.forcedCategory})
+	}
 	for _, v := range values {
+		if v.forcedCategory != "" {
+			// JSON mongo-operator keys hit straight from the walk, like
+			// body_json_scan._mongo_operator_key_hit.
+			return []string{v.forcedCategory}, fmt.Sprintf("Penetration patterns detected: %s", v.forcedCategory)
+		}
 		result := Detect(v.content, resolveClientIP(req), v.context)
 		if !result.IsThreat {
 			continue
@@ -278,6 +291,25 @@ func detectThreat(req Request, cfg *SecurityConfig) ([]string, string) {
 		return categories, fmt.Sprintf("Penetration patterns detected: %s", strings.Join(categories, ", "))
 	}
 	return nil, ""
+}
+
+// extractRequestBodyValues reads the (already replay-buffered) request body
+// once, caps it at the inspection budget, and routes it through the body
+// extraction. A body read error leaves the body unscanned, like the
+// reference's failed body read reporting a detection miss.
+func extractRequestBodyValues(req Request, cfg *SecurityConfig) []bodyScanValue {
+	if cfg == nil {
+		return nil
+	}
+	body, err := req.Body()
+	if err != nil || len(body) == 0 {
+		return nil
+	}
+	if budget := cfg.Detection.MaxBodyInspectBytes; budget > 0 && len(body) > budget {
+		body = body[:budget]
+	}
+	contentType, _ := req.Headers().Get("content-type")
+	return extractBodyScanValues(string(body), contentType, cfg)
 }
 
 func stashBlock(state *RequestState, reason, triggerInfo string) {

@@ -24,6 +24,13 @@ const (
 	DefaultTrustedProxyDepth  = 1
 	UnknownClientIdentity     = "unknown"
 	BlockedStatusSecurityFail = 500
+
+	// DefaultDetectionBinaryMinRunLength mirrors the default of the
+	// detection_binary_min_run_length SecurityConfig field (guard-core
+	// 4.0.4, upstream commit 5f399234): the shortest printable run inside a
+	// binary-dense multipart file-part payload that still reaches the
+	// pattern scan.
+	DefaultDetectionBinaryMinRunLength = 16
 )
 
 var AllDetectionCategories = []string{
@@ -90,6 +97,7 @@ type SecurityConfig struct {
 	ExcludedDetectionHeaders    map[string]bool
 	ExcludedDetectionParams     map[string]bool
 	ExcludedDetectionBodyFields map[string]bool
+	DetectionBinaryMinRunLength int
 	Detection                   Config
 
 	PassiveMode           bool
@@ -147,6 +155,7 @@ func DefaultSecurityConfig() *SecurityConfig {
 		ExcludedDetectionHeaders:    map[string]bool{},
 		ExcludedDetectionParams:     map[string]bool{},
 		ExcludedDetectionBodyFields: map[string]bool{},
+		DetectionBinaryMinRunLength: DefaultDetectionBinaryMinRunLength,
 		Detection:                   DefaultConfig(),
 		FailSecure:                  true,
 		ExcludePaths:                append([]string(nil), DefaultExcludePaths...),
@@ -277,6 +286,10 @@ func (c *SecurityConfig) Validate() error {
 	}
 	if c.EnablePenetrationDetection && len(c.EnabledDetectionCategories) == 0 {
 		return fmt.Errorf("enabled_detection_categories: detection is enabled but no categories are enabled, so it can never match")
+	}
+	if c.DetectionBinaryMinRunLength < 4 || c.DetectionBinaryMinRunLength > 1024 {
+		// Python constrains the field with pydantic ge=4 / le=1024.
+		return fmt.Errorf("detection_binary_min_run_length: must be within [4, 1024], got %d", c.DetectionBinaryMinRunLength)
 	}
 	for name := range c.MutedCheckLogs {
 		if !isKnownCheckName(name) {
