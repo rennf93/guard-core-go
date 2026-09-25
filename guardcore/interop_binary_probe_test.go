@@ -6,9 +6,10 @@ package guardcore
 // (interop/go_php_binary_vectors.py in the guard-core reference checkout).
 //
 // Reads a JSON vector list from the path in INTEROP_VECTORS_INPUT (each
-// vector: {"label": ..., "payload_b64": ...}; the payload bytes are the raw
-// request body bytes) and writes one verdict per vector to the path in
-// INTEROP_VECTORS_OUTPUT:
+// vector: {"label": ..., "payload_b64": ...} with an optional "context"
+// detect context, defaulting to "request_body:multipart_field"; the payload
+// bytes are the raw request body bytes) and writes one verdict per vector to
+// the path in INTEROP_VECTORS_OUTPUT:
 //
 //	{"label": ..., "is_threat": ..., "threat_score": ...,
 //	 "threats": [{"category": ..., "pattern": ...}]}
@@ -37,6 +38,7 @@ func TestBinaryVectorProbe(t *testing.T) {
 	var vectors []struct {
 		Label      string `json:"label"`
 		PayloadB64 string `json:"payload_b64"`
+		Context    string `json:"context"`
 	}
 	if err := json.Unmarshal(raw, &vectors); err != nil {
 		t.Fatalf("vectors input is not valid JSON: %v", err)
@@ -52,7 +54,11 @@ func TestBinaryVectorProbe(t *testing.T) {
 		if err != nil {
 			t.Fatalf("vector %q payload_b64: %v", v.Label, err)
 		}
-		result := Detect(string(payload), "127.0.0.1", "request_body:multipart_field")
+		context := v.Context
+		if context == "" {
+			context = "request_body:multipart_field"
+		}
+		result := Detect(string(payload), "127.0.0.1", context)
 		threats := make([]threatOut, 0, len(result.Threats))
 		for _, threat := range result.Threats {
 			category, _ := threat["category"].(string)
