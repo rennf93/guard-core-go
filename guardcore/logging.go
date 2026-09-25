@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"unicode/utf8"
 )
 
 var defaultSensitiveLogHeaders = map[string]bool{
@@ -112,10 +113,22 @@ func redactPairsInText(text string, sensitive map[string]bool) string {
 	})
 }
 
-func redactSensitiveJSON(node any, sensitive map[string]bool) (any, bool) {
+// jsonRedactionMaxDepth is the display-redaction JSON depth cap, matching
+// Python's _DEFAULT_MAX_JSON_DEPTH = 32 (guard_core/_utils/detection_config.py,
+// applied to the display path through _resolve_json_depth_cap): container
+// levels nested at or below the cap collapse to [REDACTED].
+const jsonRedactionMaxDepth = 32
+
+func redactSensitiveJSON(node any, sensitive map[string]bool, depth int) (any, bool, bool) {
 	switch typed := node.(type) {
 	case map[string]any:
+		if depth >= jsonRedactionMaxDepth {
+			// Depth cap: the container collapses and the display path
+			// redacts the whole value (guard-core 8bae9459).
+			return RedactedPlaceholder, true, true
+		}
 		changed := false
+		capHit := false
 		out := make(map[string]any, len(typed))
 		for key, value := range typed {
 			if sensitive[strings.ToLower(key)] {
@@ -123,22 +136,28 @@ func redactSensitiveJSON(node any, sensitive map[string]bool) (any, bool) {
 				changed = true
 				continue
 			}
-			redacted, sub := redactSensitiveJSON(value, sensitive)
+			redacted, sub, hit := redactSensitiveJSON(value, sensitive, depth+1)
 			out[key] = redacted
 			changed = changed || sub
+			capHit = capHit || hit
 		}
-		return out, changed
+		return out, changed, capHit
 	case []any:
+		if depth >= jsonRedactionMaxDepth {
+			return RedactedPlaceholder, true, true
+		}
 		changed := false
+		capHit := false
 		out := make([]any, len(typed))
 		for i, value := range typed {
-			redacted, sub := redactSensitiveJSON(value, sensitive)
+			redacted, sub, hit := redactSensitiveJSON(value, sensitive, depth+1)
 			out[i] = redacted
 			changed = changed || sub
+			capHit = capHit || hit
 		}
-		return out, changed
+		return out, changed, capHit
 	default:
-		return node, false
+		return node, false, false
 	}
 }
 
@@ -160,7 +179,14 @@ func jsonRedactText(text string, sensitive map[string]bool) string {
 	default:
 		return ""
 	}
-	redacted, changed := redactSensitiveJSON(parsed, sensitive)
+	redacted, changed, depthCapHit := redactSensitiveJSON(parsed, sensitive, 1)
+	// A depth-cap collapse on the display path redacts the whole value
+	// instead of emitting a huge half-redacted structure (guard-core
+	// 8bae9459). The cap-hit check precedes the unchanged check, matching
+	// Python's _json_redact_text ordering.
+	if depthCapHit {
+		return RedactedPlaceholder
+	}
 	if !changed {
 		return ""
 	}
@@ -307,6 +333,33 @@ func extractRequestContext(req Request, opts LogOptions) map[string]string {
 	}
 }
 
+// sanitizeForLog mirrors Python's _sanitize_for_log
+// (guard_core/_utils/logging_utils.py): the result is pure ASCII so log
+// lines can never break on legacy console encodings (Windows cp1252).
+// Newlines, carriage returns, and tabs become literal escapes; raw invalid
+// UTF-8 bytes, the Go counterpart of Python's surrogate-escaped bytes
+// (U+DC80-DCFF), become \xNN escapes carrying the original byte value; and
+// every other control or non-ASCII rune becomes a \uXXXX escape.
+func sanitizeForLog(value string) string {
+	if value == "" {
+		return value
+	}
+	sanitized := strings.NewReplacer("\n", `\n`, "\r", `\r`, "\t", `\t`).Replace(value)
+	var out strings.Builder
+	for i := 0; i < len(sanitized); {
+		r, size := utf8.DecodeRuneInString(sanitized[i:])
+		if r == utf8.RuneError && size == 1 {
+			fmt.Fprintf(&out, `\x%02x`, sanitized[i])
+		} else if r >= 32 && r <= 126 {
+			out.WriteRune(r)
+		} else {
+			fmt.Fprintf(&out, `\u%04x`, r)
+		}
+		i += size
+	}
+	return out.String()
+}
+
 func buildActivityMessage(req Request, opts LogOptions) string {
 	context := extractRequestContext(req, opts)
 	var details, reasonMessage string
@@ -315,7 +368,10 @@ func buildActivityMessage(req Request, opts LogOptions) string {
 	// headers, params, and body fields are replaced with placeholders and the
 	// result is covered by activity-logger tests). CodeQL cannot see that
 	// sanitizer, so the header-derived flows below carry an explicit
-	// suppression with that reason rather than a blind allow.
+	// suppression with that reason rather than a blind allow. The Reason and
+	// TriggerInfo fields carry detection-derived text (matched pattern
+	// previews, body excerpts) and are console-safe escaped for the same
+	// reason (guard-core f5d53ca5).
 	switch opts.LogType {
 	case "request":
 		details = fmt.Sprintf("Request from %s: %s %s", context["client_ip"], context["method"], context["url"])
@@ -325,15 +381,15 @@ func buildActivityMessage(req Request, opts LogOptions) string {
 			details = fmt.Sprintf("[PASSIVE MODE] Penetration attempt detected from %s: %s %s", context["client_ip"], context["method"], context["url"])
 			reasonMessage = fmt.Sprintf("Headers: %s", context["headers"]) // codeql[go/clear-text-logging]:ignore values masked by RedactSensitiveHeaders
 			if opts.TriggerInfo != "" {
-				reasonMessage = fmt.Sprintf("Trigger: %s - %s", opts.TriggerInfo, reasonMessage)
+				reasonMessage = fmt.Sprintf("Trigger: %s - %s", sanitizeForLog(opts.TriggerInfo), reasonMessage)
 			}
 		} else {
 			details = fmt.Sprintf("Suspicious activity detected from %s: %s %s", context["client_ip"], context["method"], context["url"])
-			reasonMessage = fmt.Sprintf("Reason: %s - Headers: %s", opts.Reason, context["headers"]) // codeql[go/clear-text-logging]:ignore values masked by RedactSensitiveHeaders
+			reasonMessage = fmt.Sprintf("Reason: %s - Headers: %s", sanitizeForLog(opts.Reason), context["headers"]) // codeql[go/clear-text-logging]:ignore values masked by RedactSensitiveHeaders
 		}
 	default:
 		details = fmt.Sprintf("%s from %s: %s %s", strings.ToUpper(opts.LogType[:1])+opts.LogType[1:], context["client_ip"], context["method"], context["url"])
-		reasonMessage = fmt.Sprintf("Details: %s - Headers: %s", opts.Reason, context["headers"]) // codeql[go/clear-text-logging]:ignore values masked by RedactSensitiveHeaders
+		reasonMessage = fmt.Sprintf("Details: %s - Headers: %s", sanitizeForLog(opts.Reason), context["headers"]) // codeql[go/clear-text-logging]:ignore values masked by RedactSensitiveHeaders
 	}
 	return fmt.Sprintf("%s - %s", details, reasonMessage)
 }
