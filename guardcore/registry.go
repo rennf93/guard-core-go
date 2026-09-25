@@ -292,11 +292,39 @@ func safeFindAll(p *compiledPattern, t scanText) ([]rmatch, bool) {
 	return out, false
 }
 
+// reconBarePathContexts mirrors Python's _RECON_BARE_PATH_CONTEXTS
+// (guard_core/handlers/_suspatterns_sources.py): contexts in which a
+// whole-value recon match counts as a probe regardless of its first
+// character.
+var reconBarePathContexts = map[string]bool{"url_path": true, "unknown": true}
+
+// reconPathValueIsProbe mirrors Python's _recon_path_value_is_probe: the
+// first context segment decides (normalizeContext strips the
+// ':embedded_json' suffix the same way Python's context.split does), and
+// outside those contexts the matched value must start with a path separator.
+func reconPathValueIsProbe(matched, context string) bool {
+	if reconBarePathContexts[normalizeContext(context)] {
+		return true
+	}
+	return stringsHasPrefix(matched, "/") || stringsHasPrefix(matched, "\\")
+}
+
+func stringsHasPrefix(s, prefix string) bool {
+	return len(s) >= len(prefix) && s[:len(prefix)] == prefix
+}
+
 func buildRegexThreat(p *compiledPattern, m rmatch, validatorContext string, prefix binaryPrefix) map[string]any {
 	if validator, ok := candidateValidators[p.source]; ok {
 		if !validator(m, validatorContext) {
 			return nil
 		}
+	}
+	// Recon leading-separator rule (guard-core upstream issue #115): recon
+	// rows whose leading path separator is optional only mark a value in a
+	// query or body context as a probe when the matched text itself starts
+	// with a path separator; url_path and unknown contexts always accept.
+	if reconOptionalSeparatorPatternSources[p.source] && !reconPathValueIsProbe(m.text(), validatorContext) {
+		return nil
 	}
 	// Binary noise gate: after the candidate rejection validators, discard
 	// matches from the noise-prone registry when the surrounding window is

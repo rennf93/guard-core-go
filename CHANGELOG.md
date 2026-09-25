@@ -3,6 +3,15 @@ Release Notes
 
 ___
 
+Unreleased
+----------
+
+### Fixed
+
+- **Recon path rows now require a leading separator on query and body values.** Whole-value recon rows whose leading path separator is optional (the extension-path row plus the product/config/doc rows such as `default`, `sap`, `actuator`, `cgi-bin`, `README.md`, `credentials.json`) no longer flag ordinary bare-word field values in `query_param` and `request_body` contexts: outside `url_path`/`unknown` contexts the matched value must itself start with `/` or `\` to count as a recon probe. Separator-prefixed probe values (`/default.asp`, `/actuator/health`, `/cgi-bin/test.cgi`) and bare words used as the URL path still detect. Parity with upstream guard-core issue #115 (fix PR #116); the set of affected rows is derived from the pattern table by the same optional-separator anchor rule as the Python engine.
+
+___
+
 v4.0.4 (2026-09-24)
 -------------------
 

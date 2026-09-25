@@ -171,6 +171,29 @@ var patternTable = []patternDef{
 	{Pattern: "<ObjectDataProvider\\b", Contexts: []string{"header", "query_param", "request_body", "unknown", "url_path"}, Category: "deserialization"},
 }
 
+// reconOptionalSeparatorAnchor is the top-level path prefix (\A[/\\]?) that
+// opens every whole-value recon row whose leading path separator is
+// OPTIONAL: outside a URL path those rows match bare words such as "default"
+// or "README.md", not only probe paths. Rows anchored on a REQUIRED
+// separator start with \A[/\\] (no trailing question mark) and are excluded
+// by the prefix check, as are recon rows with no \A anchor at all.
+// Mirrors Python's RECON_OPTIONAL_SEPARATOR_PATTERN_SOURCES derivation
+// (guard_core/handlers/_suspatterns_pattern_table.py, upstream issue #115).
+const reconOptionalSeparatorAnchor = `\A[/\\]?`
+
+// reconOptionalSeparatorPatternSources is derived from patternTable with the
+// same rule as the Python engine, so recon rows added later are picked up by
+// the leading-separator gate without a hand-maintained list.
+var reconOptionalSeparatorPatternSources = func() map[string]bool {
+	sources := make(map[string]bool)
+	for _, def := range patternTable {
+		if def.Category == "recon" && strings.HasPrefix(def.Pattern, reconOptionalSeparatorAnchor) {
+			sources[def.Pattern] = true
+		}
+	}
+	return sources
+}()
+
 var rawViewSources = map[string]bool{
 	"#\\{(?![^\\}]*\\d{4}-\\d{1,2}-\\d{1,2}(?!\\d))(?=[^\\}]*(?:@[\\w.]+@|\\b\\w+\\s*\\(|['\\\"]?\\d+['\\\"]?\\s*[*/%+\\-]\\s*['\\\"]?\\d+['\\\"]?))[^\\}]*\\}": true,
 	"'\\s*(?:[\\);]+\\s*)?--|'[\\);]*#(?:\\n|\\Z)":                                          true,
