@@ -36,6 +36,36 @@ func regexAnomaly(threats []map[string]any) float64 {
 	return sum
 }
 
+// dropViewDuplicateThreats mirrors _drop_view_duplicate_threats from
+// guard_core/handlers/suspatterns_handler.py: keep only the scan results
+// whose (pattern, match_text) pair the earlier views have not already
+// recorded, so a raw-view sighting of a row over text the processed views
+// already matched counts once instead of doubling the threat score.
+func dropViewDuplicateThreats(seenThreats, newThreats []map[string]any) []map[string]any {
+	if len(newThreats) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(seenThreats)+len(newThreats))
+	threatKey := func(t map[string]any) string {
+		pattern, _ := t["pattern"].(string)
+		match, _ := t["match"].(string)
+		return pattern + "\x00" + match
+	}
+	for _, t := range seenThreats {
+		seen[threatKey(t)] = struct{}{}
+	}
+	var kept []map[string]any
+	for _, t := range newThreats {
+		key := threatKey(t)
+		if _, duplicate := seen[key]; duplicate {
+			continue
+		}
+		seen[key] = struct{}{}
+		kept = append(kept, t)
+	}
+	return kept
+}
+
 func checkDecodedViewPathTraversal(pre *preprocessor, processedContent, content, rawViewContent string, enabledCategories map[string]bool) map[string]any {
 	if enabledCategories != nil && !enabledCategories["path_traversal"] {
 		return nil
@@ -146,6 +176,12 @@ func Detect(content string, ip string, context string) DetectResult {
 
 	rawViewContent := pre.preprocessSignalPreserving(content)
 	rawThreats, _, _ := checkRegexPatterns(newScanText(rawViewContent), context, nil, viewRaw)
+	// A raw-view sighting of a pattern over text the processed views already
+	// matched is the same evidence and must not inflate the threat score
+	// (guard-core _drop_view_duplicate_threats, applied to the raw pass
+	// only; merge order stays processed-then-raw). This port folds pattern
+	// timeouts into the threats list, so one dedup covers both.
+	rawThreats = dropViewDuplicateThreats(regexThreats, rawThreats)
 	regexThreats = append(regexThreats, rawThreats...)
 
 	if dv := checkDecodedViewPathTraversal(pre, processedContent, content, rawViewContent, nil); dv != nil {
