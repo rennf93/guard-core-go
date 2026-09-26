@@ -3,9 +3,8 @@ package guardcore
 // Engine-level port of the guard-core exempt_ips reference tests
 // (tests/test_core/test_exempt_ips.py) against the acceptance checklist of
 // specs/exempt-ips.md. The per-route decorator cases (route block_ip /
-// require_ip taking over) have no Go counterpart: the engine declares
-// RouteConfig.IPWhitelist/IPBlacklist but enforces no route IP rules, so
-// those two reference cases are not applicable here.
+// require_ip taking over) are covered separately against the enforced
+// RouteConfig.IPWhitelist/IPBlacklist semantics in route_ip_test.go.
 
 import (
 	"testing"

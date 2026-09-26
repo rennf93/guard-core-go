@@ -70,33 +70,73 @@ func (c *ipSecurityCheck) Check(req Request) *Response {
 		return createErrorResponse(cfg, 403, IPBanBlockedMessage)
 	}
 	if state.ExclusionScoped {
-		return c.checkGlobal(req, ip)
+		// The reference passes route_config=None on the exclusion-scoped
+		// path (IpSecurityCheck.check), so no route IP rules run there and
+		// the global lists decide alone.
+		return c.checkGlobal(req, ip, false)
 	}
 	if state.HasBypass("ip") {
 		return nil
 	}
-	return c.checkGlobal(req, ip)
+	route := state.RouteConfig
+	if route != nil {
+		if resp := c.checkRouteIPAccess(state, ip, route); resp != nil {
+			return resp
+		}
+	}
+	return c.checkGlobal(req, ip, route != nil && len(route.IPWhitelist) > 0)
 }
 
-func (c *ipSecurityCheck) checkGlobal(req Request, ip string) *Response {
+// checkRouteIPAccess mirrors check_route_ip_access (the reference
+// guard_core/core/checks/helpers.py plus its TypeScript port
+// checkRouteIpAccess): the route blacklist is consulted first so its matches
+// are denied before any whitelist verdict can clear them, and a configured
+// route whitelist takes over the route verdict (a miss denies, a match
+// passes the route stage). The global lists are still enforced afterwards by
+// checkGlobal, so a route whitelist match never relaxes the global blacklist
+// or the global whitelist gate; it only clears the identity flags.
+func (c *ipSecurityCheck) checkRouteIPAccess(state *RequestState, ip string, route *RouteConfig) *Response {
+	if len(route.IPBlacklist) > 0 && ipMatchesList(ip, route.IPBlacklist) {
+		return c.denyRoute(state, ip)
+	}
+	if len(route.IPWhitelist) > 0 && !ipMatchesList(ip, route.IPWhitelist) {
+		return c.denyRoute(state, ip)
+	}
+	return nil
+}
+
+func (c *ipSecurityCheck) denyRoute(state *RequestState, ip string) *Response {
+	reason := fmt.Sprintf("IP not allowed by route config: %s", ip)
+	stashBlock(state, reason, "ip_restriction")
+	if c.cfg.PassiveMode {
+		return nil
+	}
+	return createErrorResponse(c.cfg, 403, RestrictionBlockedMsg)
+}
+
+func (c *ipSecurityCheck) checkGlobal(req Request, ip string, routeOverridesIPLists bool) *Response {
 	state := req.State()
 	whitelist := c.cfg.Whitelist
 	blacklist := c.cfg.Blacklist
 	// exempt_ips only ever sets a flag after every deny check passed: it must
 	// never open the whitelist gate or add a deny path of its own (parity with
 	// guard-core's _resolve_is_exempt, which gates on the allowed verdict).
+	// A route-level IPWhitelist overrides the global lists for the identity
+	// flags exactly like the reference skip_ip_lists gate
+	// (_resolve_is_whitelisted/_resolve_is_exempt): both flags stay unset for
+	// the request even when the IP passes.
 	if len(whitelist) > 0 {
 		if !ipMatchesList(ip, whitelist) {
 			return c.deny(state, ip, "IP not in whitelist")
 		}
-		state.IsWhitelisted = true
-		state.IsExempt = ipMatchesList(ip, c.cfg.ExemptIPs)
+		state.IsWhitelisted = !routeOverridesIPLists
+		state.IsExempt = !routeOverridesIPLists && ipMatchesList(ip, c.cfg.ExemptIPs)
 		return nil
 	}
 	if len(blacklist) > 0 && ipMatchesList(ip, blacklist) {
 		return c.deny(state, ip, "IP is blacklisted")
 	}
-	state.IsExempt = ipMatchesList(ip, c.cfg.ExemptIPs)
+	state.IsExempt = !routeOverridesIPLists && ipMatchesList(ip, c.cfg.ExemptIPs)
 	return nil
 }
 
