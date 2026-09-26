@@ -197,6 +197,12 @@ func appendJSONWalkEntries(values []bodyScanValue, root *jsonNode, context strin
 			if allowLeafReparse {
 				if inner, ok := parseOrderedJSON(node.scalar); ok {
 					values = appendJSONWalkEntries(values, inner, context+embeddedJSONLeafContextSuffix, excluded)
+					// Clean-parse fall-through (embedded_json_scan.py +
+					// _check_value_enhanced): when the nested walk reports
+					// nothing, the raw leaf string still scans with the walk
+					// context, so payloads confined to the raw text
+					// (duplicate-key remnants, structural text) still hit.
+					values = append(values, bodyScanValue{content: node.scalar, context: context})
 					continue
 				}
 			}

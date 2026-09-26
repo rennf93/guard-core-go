@@ -81,6 +81,9 @@ func TestFormFieldEmbeddedJSONWalkContexts(t *testing.T) {
 		{"request_body", "data"},
 		{"request_body", "a"},
 		{"request_body:form_field:embedded_json", "<script>alert(1)</script>"},
+		// Clean-parse fall-through: the raw value still scans after its
+		// leaves (embedded_json_scan.py + _check_value_enhanced).
+		{"request_body:form_field", `{"a":"<script>alert(1)</script>"}`},
 	}
 	if len(values) != len(want) {
 		t.Fatalf("got %v, want %v", values, want)
@@ -90,6 +93,44 @@ func TestFormFieldEmbeddedJSONWalkContexts(t *testing.T) {
 			t.Fatalf("value[%d] = %v, want %v", i, values[i], want[i])
 		}
 	}
+}
+
+// Reference fall-through regression (guard-core embedded_json_scan.py +
+// detection_scan._check_value_enhanced): a clean embedded-JSON parse walks
+// the leaves first, and when no leaf hits, the RAW value still scans with
+// the field context. A payload confined to the raw text (here a duplicate-key
+// remnant the walk drops) must therefore still detect.
+func TestFormFieldEmbeddedJSONCleanParseStillScansRawValue(t *testing.T) {
+	req := newTestRequest(t, func(opts *RequestOptions, state *RequestState) {
+		opts.Method = "POST"
+		opts.Header = map[string]string{"content-type": "application/x-www-form-urlencoded"}
+		opts.Body = []byte(`data={"comment":"<script>alert(1)</script>","comment":"safe"}`)
+	})
+	categories, _ := detectThreat(req, testConfig(t))
+	assertCategoryPresent(t, categories, "xss")
+}
+
+func TestMultipartEmbeddedJSONCleanParseStillScansRawValue(t *testing.T) {
+	body := "--B0\r\nContent-Disposition: form-data; name=\"data\"\r\n\r\n" +
+		`{"comment":"<script>alert(1)</script>","comment":"safe"}` +
+		"\r\n--B0--\r\n"
+	cfg := testConfig(t)
+	categories := multipartBodyRequest(t, cfg, multipartContentType, []byte(body))
+	assertCategoryPresent(t, categories, "xss")
+}
+
+// The same fall-through one level down: a leaf string that itself parses as
+// JSON walks again with another suffix, and the raw leaf text still scans
+// with the walk context when the nested walk reports nothing.
+func TestEmbeddedJSONLeafReparseCleanParseStillScansRawLeaf(t *testing.T) {
+	inner := strings.ReplaceAll(`{"a":"<script>alert(1)</script>","a":"safe"}`, `"`, `\"`)
+	req := newTestRequest(t, func(opts *RequestOptions, state *RequestState) {
+		opts.Method = "POST"
+		opts.Header = map[string]string{"content-type": "application/x-www-form-urlencoded"}
+		opts.Body = []byte(`data={"outer":"` + inner + `"}`)
+	})
+	categories, _ := detectThreat(req, testConfig(t))
+	assertCategoryPresent(t, categories, "xss")
 }
 
 func TestMultipartTextPartEntries(t *testing.T) {

@@ -107,12 +107,15 @@ func appendFormBodyValues(values []bodyScanValue, rawBody string, excluded map[s
 }
 
 // appendFieldBodyValue scans one form/multipart field value: a value that
-// parses as a JSON object or array is walked (leaf context gains the
-// ":embedded_json" suffix) INSTEAD of being scanned raw, mirroring
-// _check_embedded_json_if_applicable short-circuiting _check_value_enhanced.
+// parses as a JSON object or array walks leaf-first (leaf context gains the
+// ":embedded_json" suffix) and the raw value still scans afterwards with the
+// field context, mirroring _check_value_enhanced: the embedded-JSON walk
+// short-circuits the raw scan only when a leaf hits, and a clean walk that
+// reports nothing falls through to the raw-value detect (payloads hidden in
+// structural text or duplicate-key remnants still hit).
 func appendFieldBodyValue(values []bodyScanValue, content, context string, excluded map[string]bool) []bodyScanValue {
 	if root, ok := parseOrderedJSON(content); ok {
-		return appendJSONWalkEntries(values, root, context+embeddedJSONLeafContextSuffix, excluded)
+		values = appendJSONWalkEntries(values, root, context+embeddedJSONLeafContextSuffix, excluded)
 	}
 	return append(values, bodyScanValue{content: content, context: context})
 }
