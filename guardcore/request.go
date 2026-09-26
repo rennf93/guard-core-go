@@ -16,6 +16,7 @@ type RequestState struct {
 	ExclusionScoped  bool
 	RouteUnresolved  bool
 	IsWhitelisted    bool
+	IsExempt         bool
 	BypassChecks     []string
 	BlockStash       *BlockStash
 	Extras           map[string]any

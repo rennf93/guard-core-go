@@ -383,7 +383,7 @@ func userAgentMatchesBlockedPattern(userAgent string, patterns []string) bool {
 func (c *userAgentCheck) Check(req Request) *Response {
 	cfg := c.cfg
 	state := req.State()
-	if state.IsWhitelisted {
+	if state.IsWhitelisted || state.IsExempt {
 		return nil
 	}
 	routeConfig := state.RouteConfig

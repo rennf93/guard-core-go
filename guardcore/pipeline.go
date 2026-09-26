@@ -82,16 +82,21 @@ func (c *ipSecurityCheck) checkGlobal(req Request, ip string) *Response {
 	state := req.State()
 	whitelist := c.cfg.Whitelist
 	blacklist := c.cfg.Blacklist
+	// exempt_ips only ever sets a flag after every deny check passed: it must
+	// never open the whitelist gate or add a deny path of its own (parity with
+	// guard-core's _resolve_is_exempt, which gates on the allowed verdict).
 	if len(whitelist) > 0 {
 		if !ipMatchesList(ip, whitelist) {
 			return c.deny(state, ip, "IP not in whitelist")
 		}
 		state.IsWhitelisted = true
+		state.IsExempt = ipMatchesList(ip, c.cfg.ExemptIPs)
 		return nil
 	}
 	if len(blacklist) > 0 && ipMatchesList(ip, blacklist) {
 		return c.deny(state, ip, "IP is blacklisted")
 	}
+	state.IsExempt = ipMatchesList(ip, c.cfg.ExemptIPs)
 	return nil
 }
 
@@ -116,7 +121,7 @@ func (c *rateLimitCheck) AppliesTo(cfg *SecurityConfig) bool {
 
 func (c *rateLimitCheck) Check(req Request) *Response {
 	state := req.State()
-	if state.IsWhitelisted || state.HasBypass("rate_limit") {
+	if state.IsWhitelisted || state.IsExempt || state.HasBypass("rate_limit") {
 		return nil
 	}
 	ip := resolveClientIP(req)
