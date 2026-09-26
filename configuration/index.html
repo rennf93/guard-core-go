@@ -454,6 +454,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#geo-country-rules" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Geo country rules
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#user-agents-headers-auth" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -755,6 +766,17 @@
     <span class="md-ellipsis">
       
         Cloud provider blocking
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#geo-country-rules" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Geo country rules
       
     </span>
   </a>
@@ -1130,6 +1152,53 @@ deny path of its own; an IP on both lists is simply a whitelist match.</p>
 </tr>
 </tbody>
 </table>
+<h2 id="geo-country-rules">Geo country rules</h2>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Default</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>WhitelistCountries</code></td>
+<td><code>[]string</code></td>
+<td>empty</td>
+<td>ISO 3166-1 alpha-2 codes, uppercased at config time. Non-empty is restrictive: only listed countries pass, and an unresolved country is denied</td>
+</tr>
+<tr>
+<td><code>BlockedCountries</code></td>
+<td><code>[]string</code></td>
+<td>empty</td>
+<td>ISO 3166-1 alpha-2 codes that are always denied. Ignored while <code>WhitelistCountries</code> is non-empty</td>
+</tr>
+<tr>
+<td><code>GeoIPDBPath</code></td>
+<td><code>string</code></td>
+<td>empty</td>
+<td>Path to a local MMDB database with top-level <code>country</code> records (the ipinfo <code>country_asn.mmdb</code> layout). Required when country rules are set and no handler is injected</td>
+</tr>
+<tr>
+<td><code>GeoIPHandler</code></td>
+<td><code>CountryResolver</code></td>
+<td>nil</td>
+<td>Injected resolver (<code>GetCountry(ip) (string, bool)</code>); replaces the built-in MMDB reader</td>
+</tr>
+</tbody>
+</table>
+<p>Country rules run inside the <code>ip_security</code> check: after the global IP lists,
+before the cloud-provider check, exactly like the reference
+<code>check_ip_access</code>. A global <code>Whitelist</code> match and a route
+<code>RouteConfig.WhitelistCountries</code> match skip the country stage. Loopback IPs
+are exempt from the global country stage. An unresolvable country fails
+closed in allowlist mode and open in blocklist mode. Route-level
+<code>RouteConfig.BlockedCountries</code> / <code>WhitelistCountries</code> combine with the route
+IP list verdicts; the route stage has no loopback exemption. The engine does
+not download databases: provision the MMDB file yourself or inject a
+resolver. Exempt IPs are not exempt from country rules.</p>
 <h2 id="user-agents-headers-auth">User agents, headers, auth</h2>
 <table>
 <thead>
@@ -1278,7 +1347,6 @@ than silently ignoring them:</p>
 <li><code>EnableDynamicRules</code></li>
 <li><code>EnableAgent</code></li>
 <li><code>EnableCORS</code></li>
-<li><code>WhitelistCountries</code> / <code>BlockedCountries</code> (GeoIP is not ported)</li>
 <li><code>GlobalBehaviorRules</code></li>
 </ul>
 <p>Each returns an <code>*UnsupportedFeatureError</code> from <code>Validate()</code>. See

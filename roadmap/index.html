@@ -600,8 +600,11 @@ for the detailed per-milestone notes).</p>
   the detector yet, so payloads carried solely in a body go unflagged.</li>
 <li><strong>Security events</strong> - <code>ip_banned</code>, <code>ip_unbanned</code>, <code>rate_limited</code>,
   <code>cloud_blocked</code>, and middleware lifecycle events are not emitted yet.</li>
-<li><strong>GeoIP</strong> - <code>WhitelistCountries</code> / <code>BlockedCountries</code> and geographic rate
-  limits are fail-closed unsupported options.</li>
+<li><strong>GeoIP downloads</strong> - <code>WhitelistCountries</code> / <code>BlockedCountries</code> and the
+  route-level country rules are enforced by the <code>ip_security</code> check over a
+  locally provisioned MMDB file (or an injected <code>CountryResolver</code>). Still
+  deferred: the IPInfo token download/refresh lifecycle, the Redis-cached
+  database copy, geographic rate limits, and <code>country_blocked</code> events.</li>
 <li><strong>Behavioral rules</strong> - <code>GlobalBehaviorRules</code> and <code>EnableDynamicRules</code> are
   fail-closed unsupported options.</li>
 <li><strong>CORS</strong> - <code>EnableCORS</code> is fail-closed; enforce CORS at your edge or in your
