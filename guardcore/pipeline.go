@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/netip"
 	"sort"
 	"strings"
 	"sync"
@@ -71,35 +72,47 @@ func (c *ipSecurityCheck) Check(req Request) *Response {
 	}
 	if state.ExclusionScoped {
 		// The reference passes route_config=None on the exclusion-scoped
-		// path (IpSecurityCheck.check), so no route IP rules run there and
-		// the global lists decide alone.
-		return c.checkGlobal(req, ip, false)
+		// path (IpSecurityCheck.check), so no route IP or country rules run
+		// there and the global lists decide alone.
+		return c.checkGlobal(req, ip, false, false)
 	}
 	if state.HasBypass("ip") {
 		return nil
 	}
 	route := state.RouteConfig
+	routeOverridesIPLists := false
+	skipCountries := false
 	if route != nil {
 		if resp := c.checkRouteIPAccess(state, ip, route); resp != nil {
 			return resp
 		}
+		routeOverridesIPLists = len(route.IPWhitelist) > 0
+		// A route allow_countries match clears the global country stage for
+		// the request, exactly like the route IP whitelist clears the global
+		// IP lists (the reference _route_country_whitelist_matched).
+		skipCountries = routeCountryAccess(ip, route, cfg.GeoIPHandler) == countryAllowed
 	}
-	return c.checkGlobal(req, ip, route != nil && len(route.IPWhitelist) > 0)
+	return c.checkGlobal(req, ip, routeOverridesIPLists, skipCountries)
 }
 
 // checkRouteIPAccess mirrors check_route_ip_access (the reference
 // guard_core/core/checks/helpers.py plus its TypeScript port
 // checkRouteIpAccess): the route blacklist is consulted first so its matches
-// are denied before any whitelist verdict can clear them, and a configured
+// are denied before any whitelist verdict can clear them, a configured
 // route whitelist takes over the route verdict (a miss denies, a match
-// passes the route stage). The global lists are still enforced afterwards by
-// checkGlobal, so a route whitelist match never relaxes the global blacklist
-// or the global whitelist gate; it only clears the identity flags.
+// passes the route stage), and the route country verdict combines with the
+// IP verdict: any deny denies, otherwise any allow passes. The global lists
+// are still enforced afterwards by checkGlobal, so a route whitelist match
+// never relaxes the global blacklist or the global whitelist gate; it only
+// clears the identity flags.
 func (c *ipSecurityCheck) checkRouteIPAccess(state *RequestState, ip string, route *RouteConfig) *Response {
+	ipBlocked := false
 	if len(route.IPBlacklist) > 0 && ipMatchesList(ip, route.IPBlacklist) {
-		return c.denyRoute(state, ip)
+		ipBlocked = true
+	} else if len(route.IPWhitelist) > 0 && !ipMatchesList(ip, route.IPWhitelist) {
+		ipBlocked = true
 	}
-	if len(route.IPWhitelist) > 0 && !ipMatchesList(ip, route.IPWhitelist) {
+	if ipBlocked || routeCountryAccess(ip, route, c.cfg.GeoIPHandler) == countryDenied {
 		return c.denyRoute(state, ip)
 	}
 	return nil
@@ -114,7 +127,58 @@ func (c *ipSecurityCheck) denyRoute(state *RequestState, ip string) *Response {
 	return createErrorResponse(c.cfg, 403, RestrictionBlockedMsg)
 }
 
-func (c *ipSecurityCheck) checkGlobal(req Request, ip string, routeOverridesIPLists bool) *Response {
+// countryVerdict mirrors the True/False/None returns of the reference
+// check_country_access: denied, allowed, or no verdict (no rules or no
+// resolver).
+type countryVerdict int8
+
+const (
+	countryNoRules countryVerdict = iota
+	countryDenied
+	countryAllowed
+)
+
+// routeCountryAccess mirrors check_country_access
+// (guard_core/core/checks/helpers.py): the route blocked_countries list
+// denies its match, a route whitelist_countries list answers membership
+// outright (an unresolved country denies), anything else stays neutral.
+// Unlike the global country stage there is no loopback exemption here,
+// exactly like the reference.
+func routeCountryAccess(ip string, route *RouteConfig, resolver CountryResolver) countryVerdict {
+	if resolver == nil || route == nil {
+		return countryNoRules
+	}
+	country := ""
+	resolved := false
+	if len(route.BlockedCountries) > 0 {
+		if code, ok := resolver.GetCountry(ip); ok {
+			country, resolved = code, true
+			if code != "" && containsCountry(route.BlockedCountries, code) {
+				return countryDenied
+			}
+		}
+	}
+	if len(route.WhitelistCountries) > 0 {
+		if !resolved {
+			country, resolved = resolver.GetCountry(ip)
+		}
+		if !resolved || country == "" {
+			return countryDenied
+		}
+		if containsCountry(route.WhitelistCountries, country) {
+			return countryAllowed
+		}
+		return countryDenied
+	}
+	return countryNoRules
+}
+
+// checkGlobal mirrors the reference _resolve_global_ip_access plus
+// check_ip_access (guard_core/_utils/access_control.py): the global IP
+// lists decide first, then the country stage (skipped for a global
+// whitelist match or a route allow_countries match), then the exempt flag
+// is only set once every deny check passed.
+func (c *ipSecurityCheck) checkGlobal(req Request, ip string, routeOverridesIPLists, skipCountries bool) *Response {
 	state := req.State()
 	whitelist := c.cfg.Whitelist
 	blacklist := c.cfg.Blacklist
@@ -127,21 +191,67 @@ func (c *ipSecurityCheck) checkGlobal(req Request, ip string, routeOverridesIPLi
 	// the request even when the IP passes.
 	if len(whitelist) > 0 {
 		if !ipMatchesList(ip, whitelist) {
-			return c.deny(state, ip, "IP not in whitelist")
+			return c.deny(state, ip, "IP not in whitelist", "ip_restriction")
 		}
 		state.IsWhitelisted = !routeOverridesIPLists
 		state.IsExempt = !routeOverridesIPLists && ipMatchesList(ip, c.cfg.ExemptIPs)
-		return nil
+		// A global whitelist match skips the country stage (the reference
+		// sets skip_countries from the whitelist membership), so a whitelisted
+		// IP is never country blocked.
+		skipCountries = true
 	}
 	if len(blacklist) > 0 && ipMatchesList(ip, blacklist) {
-		return c.deny(state, ip, "IP is blacklisted")
+		return c.deny(state, ip, "IP is blacklisted", "ip_restriction")
+	}
+	if !skipCountries {
+		if reason, blocked := globalCountryVerdict(c.cfg, ip); blocked {
+			return c.deny(state, ip, reason, "country_restriction")
+		}
 	}
 	state.IsExempt = !routeOverridesIPLists && ipMatchesList(ip, c.cfg.ExemptIPs)
 	return nil
 }
 
-func (c *ipSecurityCheck) deny(state *RequestState, ip, reason string) *Response {
-	stashBlock(state, reason, "ip_restriction")
+// globalCountryVerdict mirrors _resolve_country_verdict plus
+// _check_blocked_countries_detail (guard_core/_utils/access_control.py):
+// loopback IPs are exempt, an unresolved country fails closed only when the
+// allowlist is restrictive (the blocklist mode cannot confirm a country and
+// lets the request pass), and the allowlist takes precedence over the
+// blocklist. The returned reason matches the reference block reasons.
+func globalCountryVerdict(cfg *SecurityConfig, ip string) (string, bool) {
+	blocked := cfg.BlockedCountries
+	allowed := cfg.WhitelistCountries
+	if len(blocked) == 0 && len(allowed) == 0 {
+		return "", false
+	}
+	resolver := cfg.GeoIPHandler
+	if resolver == nil {
+		return "", false
+	}
+	if addr, err := netip.ParseAddr(ip); err == nil && addr.IsLoopback() {
+		return "", false
+	}
+	country, resolved := resolver.GetCountry(ip)
+	if !resolved {
+		if len(allowed) > 0 {
+			return fmt.Sprintf("IP %s not in global allowlist/blocklist", ip), true
+		}
+		return "", false
+	}
+	if len(allowed) > 0 {
+		if containsCountry(allowed, country) {
+			return "", false
+		}
+		return fmt.Sprintf("IP from blocked country: %s", country), true
+	}
+	if containsCountry(blocked, country) {
+		return fmt.Sprintf("IP from blocked country: %s", country), true
+	}
+	return "", false
+}
+
+func (c *ipSecurityCheck) deny(state *RequestState, ip, reason, triggerInfo string) *Response {
+	stashBlock(state, reason, triggerInfo)
 	if c.cfg.PassiveMode {
 		return nil
 	}

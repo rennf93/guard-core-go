@@ -15,8 +15,11 @@ for the detailed per-milestone notes).
   the detector yet, so payloads carried solely in a body go unflagged.
 - **Security events** - `ip_banned`, `ip_unbanned`, `rate_limited`,
   `cloud_blocked`, and middleware lifecycle events are not emitted yet.
-- **GeoIP** - `WhitelistCountries` / `BlockedCountries` and geographic rate
-  limits are fail-closed unsupported options.
+- **GeoIP downloads** - `WhitelistCountries` / `BlockedCountries` and the
+  route-level country rules are enforced by the `ip_security` check over a
+  locally provisioned MMDB file (or an injected `CountryResolver`). Still
+  deferred: the IPInfo token download/refresh lifecycle, the Redis-cached
+  database copy, geographic rate limits, and `country_blocked` events.
 - **Behavioral rules** - `GlobalBehaviorRules` and `EnableDynamicRules` are
   fail-closed unsupported options.
 - **CORS** - `EnableCORS` is fail-closed; enforce CORS at your edge or in your

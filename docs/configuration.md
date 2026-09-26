@@ -80,6 +80,26 @@ deny path of its own; an IP on both lists is simply a whitelist match.
 | `BlockCloudProviders` | `[]string` | empty | e.g. `AWS`, or `AWS:!us-east-1` to carve out a region |
 | `CloudIPRefreshInterval` | `int` | `3600` | Seconds, clamped to `[60, 86400]` |
 
+## Geo country rules
+
+| Field | Type | Default | Notes |
+|---|---|---|---|
+| `WhitelistCountries` | `[]string` | empty | ISO 3166-1 alpha-2 codes, uppercased at config time. Non-empty is restrictive: only listed countries pass, and an unresolved country is denied |
+| `BlockedCountries` | `[]string` | empty | ISO 3166-1 alpha-2 codes that are always denied. Ignored while `WhitelistCountries` is non-empty |
+| `GeoIPDBPath` | `string` | empty | Path to a local MMDB database with top-level `country` records (the ipinfo `country_asn.mmdb` layout). Required when country rules are set and no handler is injected |
+| `GeoIPHandler` | `CountryResolver` | nil | Injected resolver (`GetCountry(ip) (string, bool)`); replaces the built-in MMDB reader |
+
+Country rules run inside the `ip_security` check: after the global IP lists,
+before the cloud-provider check, exactly like the reference
+`check_ip_access`. A global `Whitelist` match and a route
+`RouteConfig.WhitelistCountries` match skip the country stage. Loopback IPs
+are exempt from the global country stage. An unresolvable country fails
+closed in allowlist mode and open in blocklist mode. Route-level
+`RouteConfig.BlockedCountries` / `WhitelistCountries` combine with the route
+IP list verdicts; the route stage has no loopback exemption. The engine does
+not download databases: provision the MMDB file yourself or inject a
+resolver. Exempt IPs are not exempt from country rules.
+
 ## User agents, headers, auth
 
 | Field | Type | Notes |
@@ -152,7 +172,6 @@ than silently ignoring them:
 - `EnableDynamicRules`
 - `EnableAgent`
 - `EnableCORS`
-- `WhitelistCountries` / `BlockedCountries` (GeoIP is not ported)
 - `GlobalBehaviorRules`
 
 Each returns an `*UnsupportedFeatureError` from `Validate()`. See

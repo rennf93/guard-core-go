@@ -2,6 +2,7 @@ package guardcore
 
 import (
 	"fmt"
+	"log"
 	"net/netip"
 	"regexp"
 	"strings"
@@ -126,6 +127,15 @@ type SecurityConfig struct {
 	BlockedUserAgents   []string
 	WhitelistCountries  []string
 	BlockedCountries    []string
+
+	// GeoIP country rules resolve through GeoIPHandler; when it is nil and
+	// country rules are configured, Validate builds a GeoIPManager over
+	// GeoIPDBPath (the reference _resolve_geo_ip_handler building an
+	// IPInfoManager from ipinfo_db_path). Country rules with neither a
+	// handler nor a database path fail config construction.
+	GeoIPDBPath  string
+	GeoIPHandler CountryResolver
+
 	GlobalBehaviorRules []string
 	CustomRequestCheck  func(req Request) *Response
 	LogRequestLevel     string
@@ -203,11 +213,18 @@ func (c *SecurityConfig) Validate() error {
 	if c.EnableCORS {
 		return c.unsupported("enable_cors", "CORS handling is not implemented in this port yet")
 	}
-	if len(c.WhitelistCountries) > 0 {
-		return c.unsupported("whitelist_countries", "geo blocking is not implemented in this port yet")
+	if len(c.WhitelistCountries) > 0 && len(c.BlockedCountries) > 0 {
+		// The reference warns (UserWarning) instead of erroring: the
+		// allowlist is restrictive and shadows the blocklist.
+		log.Printf("blocked_countries is ignored when whitelist_countries is non-empty: a non-empty whitelist_countries is restrictive (only listed countries pass), so blocked_countries has no effect. Use one or the other.")
 	}
-	if len(c.BlockedCountries) > 0 {
-		return c.unsupported("blocked_countries", "geo blocking is not implemented in this port yet")
+	c.WhitelistCountries = normalizeCountryList(c.WhitelistCountries)
+	c.BlockedCountries = normalizeCountryList(c.BlockedCountries)
+	if (len(c.BlockedCountries) > 0 || len(c.WhitelistCountries) > 0) && c.GeoIPHandler == nil {
+		if c.GeoIPDBPath == "" {
+			return fmt.Errorf("geo_ip_handler is required if blocked_countries or whitelist_countries is set (set GeoIPDBPath to an MMDB database or inject a GeoIPHandler)")
+		}
+		c.GeoIPHandler = NewGeoIPManager(c.GeoIPDBPath)
 	}
 	for _, selector := range c.BlockCloudProviders {
 		provider, _, _ := strings.Cut(selector, ":!")
@@ -373,6 +390,38 @@ func validateIPList(field string, entries []string) error {
 		}
 	}
 	return nil
+}
+
+// normalizeCountryList mirrors the reference coerce_country_set
+// (guard_core/_security_config_geo_validators.py): every entry is uppercased
+// and duplicates collapse (frozenset semantics). ISO codes are not
+// format-validated, exactly like the reference.
+func normalizeCountryList(entries []string) []string {
+	if len(entries) == 0 {
+		return entries
+	}
+	seen := make(map[string]bool, len(entries))
+	out := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		code := strings.ToUpper(entry)
+		if seen[code] {
+			continue
+		}
+		seen[code] = true
+		out = append(out, code)
+	}
+	return out
+}
+
+// containsCountry answers exact membership, the reference
+// `country in blocked_countries` check.
+func containsCountry(entries []string, code string) bool {
+	for _, entry := range entries {
+		if entry == code {
+			return true
+		}
+	}
+	return false
 }
 
 func isKnownCheckName(name string) bool {
