@@ -536,6 +536,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#cors" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CORS
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -849,6 +860,17 @@
     <span class="md-ellipsis">
       
         Unsupported (fail-closed) options
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cors" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CORS
       
     </span>
   </a>
@@ -1346,11 +1368,73 @@ than silently ignoring them:</p>
 <ul>
 <li><code>EnableDynamicRules</code></li>
 <li><code>EnableAgent</code></li>
-<li><code>EnableCORS</code></li>
 <li><code>GlobalBehaviorRules</code></li>
 </ul>
 <p>Each returns an <code>*UnsupportedFeatureError</code> from <code>Validate()</code>. See
 <a href="../roadmap/">Roadmap</a> for the full divergence list.</p>
+<h2 id="cors">CORS</h2>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Default</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>EnableCORS</code></td>
+<td><code>bool</code></td>
+<td><code>false</code></td>
+<td>Enables the CORS handler over the engine</td>
+</tr>
+<tr>
+<td><code>CORSAllowOrigins</code></td>
+<td><code>[]string</code></td>
+<td><code>["*"]</code></td>
+<td>Exact origins; <code>*</code> allows every origin</td>
+</tr>
+<tr>
+<td><code>CORSAllowMethods</code></td>
+<td><code>[]string</code></td>
+<td><code>GET, POST, PUT, PATCH, DELETE, OPTIONS</code></td>
+<td>Uppercased at config time; an empty list falls back to <code>GET</code></td>
+</tr>
+<tr>
+<td><code>CORSAllowHeaders</code></td>
+<td><code>[]string</code></td>
+<td><code>["*"]</code></td>
+<td>Lowercased at config time; <code>*</code> echoes the requested headers verbatim</td>
+</tr>
+<tr>
+<td><code>CORSAllowCredentials</code></td>
+<td><code>bool</code></td>
+<td><code>false</code></td>
+<td>Incompatible with the <code>*</code> origin: that combination fails config construction</td>
+</tr>
+<tr>
+<td><code>CORSExposeHeaders</code></td>
+<td><code>[]string</code></td>
+<td>empty</td>
+<td>Joined into <code>Access-Control-Expose-Headers</code> on responses</td>
+</tr>
+<tr>
+<td><code>CORSMaxAge</code></td>
+<td><code>int</code></td>
+<td><code>600</code></td>
+<td>A configured <code>0</code> falls back to <code>600</code></td>
+</tr>
+</tbody>
+</table>
+<p>Behavior mirrors the reference <code>CorsHandler</code> (guard_core
+<code>handlers/cors_handler.py</code>) and the adapter dispatch: a preflight (OPTIONS
+carrying <code>Access-Control-Request-Method</code>) executes the security pipeline and
+is then short-circuited with <code>200 OK</code> (or <code>400 Disallowed CORS: origin,
+method, headers</code>), blocked responses compose the CORS headers on top of the
+security-header set, and disallowed origins simply get no CORS headers (the
+browser enforces). For pass-through responses the adapter merges
+<code>Engine.ResponseHeaders()</code> with <code>Engine.CORSResponseHeaders(req)</code>.</p>
 
 
 
