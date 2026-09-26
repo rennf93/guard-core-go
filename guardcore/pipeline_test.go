@@ -308,7 +308,6 @@ func TestUnsupportedConfigFeaturesFailClosed(t *testing.T) {
 	}{
 		{"enable_dynamic_rules", func(c *SecurityConfig) { c.EnableDynamicRules = true }},
 		{"enable_agent", func(c *SecurityConfig) { c.EnableAgent = true }},
-		{"enable_cors", func(c *SecurityConfig) { c.EnableCORS = true }},
 		{"global_behavior_rules", func(c *SecurityConfig) { c.GlobalBehaviorRules = []string{"rule"} }},
 	}
 	for _, tc := range cases {

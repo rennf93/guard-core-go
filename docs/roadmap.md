@@ -22,8 +22,6 @@ for the detailed per-milestone notes).
   database copy, geographic rate limits, and `country_blocked` events.
 - **Behavioral rules** - `GlobalBehaviorRules` and `EnableDynamicRules` are
   fail-closed unsupported options.
-- **CORS** - `EnableCORS` is fail-closed; enforce CORS at your edge or in your
-  adapter for now.
 - **Redaction gate** - the Python engine's generative log-redaction fuzz
   harness (the CI redaction-gate workflow) is not ported. The config surface
   exists (`LogSensitiveHeaders`, `LogSensitiveParams`,

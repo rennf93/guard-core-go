@@ -32,6 +32,11 @@ const (
 	// binary-dense multipart file-part payload that still reaches the
 	// pattern scan.
 	DefaultDetectionBinaryMinRunLength = 16
+
+	// DefaultCORSMaxAge mirrors the cors_max_age SecurityConfig default
+	// (_security_config_fields.py); a configured 0 falls back to it like
+	// the reference `config.cors_max_age or 600`.
+	DefaultCORSMaxAge = 600
 )
 
 var AllDetectionCategories = []string{
@@ -116,13 +121,26 @@ type SecurityConfig struct {
 	LogSensitiveParams     map[string]bool
 	LogSensitiveBodyFields map[string]bool
 
-	EnforceHTTPS        bool
-	EmergencyMode       bool
-	EmergencyWhitelist  []string
-	AuthVerifier        AuthVerifier
-	EnableDynamicRules  bool
-	EnableAgent         bool
-	EnableCORS          bool
+	EnforceHTTPS       bool
+	EmergencyMode      bool
+	EmergencyWhitelist []string
+	AuthVerifier       AuthVerifier
+	EnableDynamicRules bool
+	EnableAgent        bool
+	EnableCORS         bool
+
+	// CORS surface, mirrored from the reference cors_* SecurityConfig
+	// fields (_security_config_fields.py): default origins/headers are the
+	// wildcard, default methods cover the six common verbs, default
+	// max_age is 600. Validate() uppercases the methods, lowercases the
+	// header names, and rejects the wildcard+credentials misconfiguration.
+	CORSAllowOrigins     []string
+	CORSAllowMethods     []string
+	CORSAllowHeaders     []string
+	CORSAllowCredentials bool
+	CORSExposeHeaders    []string
+	CORSMaxAge           int
+
 	BlockCloudProviders []string
 	BlockedUserAgents   []string
 	WhitelistCountries  []string
@@ -177,6 +195,10 @@ func DefaultSecurityConfig() *SecurityConfig {
 		LogSensitiveHeaders:         map[string]bool{},
 		LogSensitiveParams:          map[string]bool{},
 		LogSensitiveBodyFields:      map[string]bool{},
+		CORSAllowOrigins:            []string{"*"},
+		CORSAllowMethods:            []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		CORSAllowHeaders:            []string{"*"},
+		CORSMaxAge:                  DefaultCORSMaxAge,
 		CloudIPRefreshInterval:      DefaultCloudIPRefreshInterval,
 	}
 }
@@ -210,8 +232,8 @@ func (c *SecurityConfig) Validate() error {
 	if c.EnableAgent {
 		return c.unsupported("enable_agent", "Guard Agent telemetry is not implemented in this port yet")
 	}
-	if c.EnableCORS {
-		return c.unsupported("enable_cors", "CORS handling is not implemented in this port yet")
+	if err := validateCORS(c); err != nil {
+		return err
 	}
 	if len(c.WhitelistCountries) > 0 && len(c.BlockedCountries) > 0 {
 		// The reference warns (UserWarning) instead of erroring: the

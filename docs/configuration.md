@@ -171,8 +171,28 @@ than silently ignoring them:
 
 - `EnableDynamicRules`
 - `EnableAgent`
-- `EnableCORS`
 - `GlobalBehaviorRules`
 
 Each returns an `*UnsupportedFeatureError` from `Validate()`. See
 [Roadmap](roadmap.md) for the full divergence list.
+
+## CORS
+
+| Field | Type | Default | Notes |
+|---|---|---|---|
+| `EnableCORS` | `bool` | `false` | Enables the CORS handler over the engine |
+| `CORSAllowOrigins` | `[]string` | `["*"]` | Exact origins; `*` allows every origin |
+| `CORSAllowMethods` | `[]string` | `GET, POST, PUT, PATCH, DELETE, OPTIONS` | Uppercased at config time; an empty list falls back to `GET` |
+| `CORSAllowHeaders` | `[]string` | `["*"]` | Lowercased at config time; `*` echoes the requested headers verbatim |
+| `CORSAllowCredentials` | `bool` | `false` | Incompatible with the `*` origin: that combination fails config construction |
+| `CORSExposeHeaders` | `[]string` | empty | Joined into `Access-Control-Expose-Headers` on responses |
+| `CORSMaxAge` | `int` | `600` | A configured `0` falls back to `600` |
+
+Behavior mirrors the reference `CorsHandler` (guard_core
+`handlers/cors_handler.py`) and the adapter dispatch: a preflight (OPTIONS
+carrying `Access-Control-Request-Method`) executes the security pipeline and
+is then short-circuited with `200 OK` (or `400 Disallowed CORS: origin,
+method, headers`), blocked responses compose the CORS headers on top of the
+security-header set, and disallowed origins simply get no CORS headers (the
+browser enforces). For pass-through responses the adapter merges
+`Engine.ResponseHeaders()` with `Engine.CORSResponseHeaders(req)`.

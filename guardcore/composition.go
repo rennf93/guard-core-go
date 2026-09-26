@@ -14,6 +14,7 @@ type Engine struct {
 	Ban       *IPBanManager
 	RateLimit *RateLimitManager
 	Cloud     *CloudManager
+	CORS      *CORSPolicy
 
 	pipeline       *SecurityCheckPipeline
 	exclusions     exclusionMatcher
@@ -43,6 +44,7 @@ func NewEngine(cfg *SecurityConfig) (*Engine, error) {
 		Ban:       ban,
 		RateLimit: rateLimit,
 		Cloud:     DefaultCloudManager,
+		CORS:      newCORSPolicy(cfg),
 		pipeline:  pipeline,
 		exclusions: exclusionMatcher{
 			cfg: cfg,
@@ -87,15 +89,35 @@ func (e *Engine) refreshCloudRangesWithoutRedis() error {
 	return e.Cloud.RefreshAsync(e.Config.BlockCloudProviders, e.Config.CloudIPRefreshInterval)
 }
 
+// Check runs the security pipeline. With CORS enabled it mirrors the
+// reference adapter dispatch (fastapi-guard guard/middleware.py): a preflight
+// request executes the pipeline first and is then answered by the CORS
+// handler's short-circuit (200 "OK" or 400 "Disallowed CORS: ..."), and every
+// blocked response composes the CORS headers on top of the engine's
+// security-header set exactly like _inject_cors_headers.
 func (e *Engine) Check(req Request) *Response {
 	state := req.State()
+	if e.CORS != nil && IsPreflight(req) {
+		// The reference dispatch runs the preflight branch before the
+		// passthrough handler marks the request exclusion-scoped, so the
+		// pipeline executes unscoped here.
+		if blocking := e.pipeline.Execute(req); blocking != nil {
+			e.CORS.injectResponseHeaders(blocking, req.Headers())
+			return blocking
+		}
+		return e.CORS.buildPreflightResponse(req)
+	}
 	if e.exclusions.matches(req.URLPath()) {
 		state.ExclusionScoped = true
 	}
 	if routeConfig := e.Routes.Get(state.GuardRouteID); routeConfig != nil && routeConfig.HasBypass("all") && !e.Config.PassiveMode {
 		return nil
 	}
-	return e.pipeline.Execute(req)
+	resp := e.pipeline.Execute(req)
+	if resp != nil && e.CORS != nil {
+		e.CORS.injectResponseHeaders(resp, req.Headers())
+	}
+	return resp
 }
 
 func (e *Engine) CreateErrorResponse(statusCode int, defaultMessage string) *Response {
@@ -110,6 +132,19 @@ func (e *Engine) CreateErrorResponse(statusCode int, defaultMessage string) *Res
 // engine-side. An empty map means the feature is disabled.
 func (e *Engine) ResponseHeaders() map[string]string {
 	return responseHeaders(e.Config)
+}
+
+// CORSResponseHeaders computes the CORS headers the adapter must put on a
+// normal (pass-through) response for this request, mirroring the reference
+// _inject_cors_headers over CorsHandler.build_response_headers. It returns
+// nil when CORS is disabled, when the request carries no Origin header, or
+// when the origin is disallowed (the browser enforces the policy). Blocked
+// responses returned from Check already carry these headers.
+func (e *Engine) CORSResponseHeaders(req Request) map[string]string {
+	if e.CORS == nil {
+		return nil
+	}
+	return e.CORS.buildResponseHeaders(req.Headers())
 }
 
 func (e *Engine) Close() error {
