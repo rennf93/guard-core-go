@@ -1083,7 +1083,7 @@ deny path of its own; an IP on both lists is simply a whitelist match.</p>
 <td><code>ExcludedDetectionHeaders</code></td>
 <td><code>map[string]bool</code></td>
 <td>empty</td>
-<td>Header names skipped by detection</td>
+<td>Header names merged into the excluded-header scan: excluded headers skip the <code>ssrf</code> category only when the header is address-carrying or its value parses as an address chain; every other category still scans them</td>
 </tr>
 <tr>
 <td><code>ExcludedDetectionParams</code></td>
