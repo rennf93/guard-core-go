@@ -240,24 +240,33 @@ func detectThreat(req Request, cfg *SecurityConfig) ([]string, string) {
 		content        string
 		context        string
 		forcedCategory string
+		skipCategories map[string]bool
 	}
 	var values []value
 	if path := req.URLPath(); path != "" {
-		values = append(values, value{path, "url_path", ""})
+		values = append(values, value{path, "url_path", "", nil})
 	}
 	for key, v := range req.QueryParams() {
 		if cfg.ExcludedDetectionParams[strings.ToLower(key)] {
 			continue
 		}
-		values = append(values, value{v, "query_param", ""})
+		values = append(values, value{v, "query_param", "", nil})
 	}
+	// Excluded headers (the hardcoded proxy identity set merged with
+	// cfg.ExcludedDetectionHeaders) are not skipped outright: like the
+	// reference's _scan_excluded_header_component, they scan with every
+	// enabled category except the ones their value is known to
+	// false-positive (ssrf for address-carrying headers and for address
+	// chain values), so an attack payload in the same header still detects.
+	excludedHeaders := mergedExcludedDetectionHeaders(cfg)
 	headers := req.Headers()
 	for name := range headers.Map() {
-		if cfg.ExcludedDetectionHeaders[strings.ToLower(name)] {
-			continue
-		}
 		if hv, ok := headers.Get(name); ok && hv != "" {
-			values = append(values, value{hv, "header", ""})
+			v := value{content: hv, context: "header"}
+			if excludedHeaders[strings.ToLower(name)] {
+				v.skipCategories = excludedHeaderSkipCategories(name, hv)
+			}
+			values = append(values, v)
 		}
 	}
 	// Body surface (guard-core 4.0.4 parity): the capped body is extracted
@@ -267,7 +276,7 @@ func detectThreat(req Request, cfg *SecurityConfig) ([]string, string) {
 	// exactly like the reference.
 	bodyValues := extractRequestBodyValues(req, cfg)
 	for _, v := range bodyValues {
-		values = append(values, value{v.content, v.context, v.forcedCategory})
+		values = append(values, value{v.content, v.context, v.forcedCategory, nil})
 	}
 	for _, v := range values {
 		if v.forcedCategory != "" {
@@ -283,7 +292,7 @@ func detectThreat(req Request, cfg *SecurityConfig) ([]string, string) {
 		seen := map[string]bool{}
 		for _, threat := range result.Threats {
 			category, _ := threat["category"].(string)
-			if category == "" || !enabled[category] || seen[category] {
+			if category == "" || !enabled[category] || v.skipCategories[category] || seen[category] {
 				continue
 			}
 			seen[category] = true

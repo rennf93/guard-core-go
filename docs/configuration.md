@@ -68,7 +68,7 @@ deny path of its own; an IP on both lists is simply a whitelist match.
 |---|---|---|---|
 | `EnablePenetrationDetection` | `bool` | `true` | |
 | `EnabledDetectionCategories` | `[]string` | all categories | See [Detection](detection.md) |
-| `ExcludedDetectionHeaders` | `map[string]bool` | empty | Header names skipped by detection |
+| `ExcludedDetectionHeaders` | `map[string]bool` | empty | Header names merged into the excluded-header scan: excluded headers skip the `ssrf` category only when the header is address-carrying or its value parses as an address chain; every other category still scans them |
 | `ExcludedDetectionParams` | `map[string]bool` | empty | Query parameter names skipped |
 | `ExcludedDetectionBodyFields` | `map[string]bool` | empty | JSON body fields skipped |
 | `Detection` | `Config` | `DefaultConfig()` | Detector tuning (see below) |
