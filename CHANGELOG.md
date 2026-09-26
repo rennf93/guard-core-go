@@ -3,8 +3,11 @@ Release Notes
 
 ___
 
-Unreleased
-----------
+v4.1.0 (2026-09-26)
+-------------------
+
+Geo country blocking, CORS, per-route IP rules, security headers and exempt_ips; full parity with guard-core 4.1.0 (v4.1.0)
+---------------------------------------------------------------------------------------------------------------------------
 
 ### Added
 
