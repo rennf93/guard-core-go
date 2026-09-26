@@ -377,12 +377,21 @@ func createErrorResponse(cfg *SecurityConfig, statusCode int, defaultMessage str
 			message = custom
 		}
 	}
-	return NewResponseFactory().CreateResponse(message, statusCode)
+	response := NewResponseFactory().CreateResponse(message, statusCode)
+	// The reference error factory applies the security headers on every error
+	// response (guard_core/core/responses/factory.py apply_security_headers).
+	for name, value := range responseHeaders(cfg) {
+		response.SetHeader(name, value)
+	}
+	return response
 }
 
-func errorResponse(statusCode int, message string) *Response {
-	factory := NewResponseFactory()
-	return factory.CreateResponse(message, statusCode)
+func errorResponse(cfg *SecurityConfig, statusCode int, message string) *Response {
+	response := NewResponseFactory().CreateResponse(message, statusCode)
+	for name, value := range responseHeaders(cfg) {
+		response.SetHeader(name, value)
+	}
+	return response
 }
 
 func resolveClientIP(req Request) string {
@@ -649,7 +658,7 @@ func (p *SecurityCheckPipeline) handleCheckError(check SecurityCheck, req Reques
 				message = custom
 			}
 		}
-		return errorResponse(500, message)
+		return errorResponse(cfg, 500, message)
 	}
 	return nil
 }
@@ -670,7 +679,7 @@ func (p *SecurityCheckPipeline) handleRebuildError(req Request, err error) *Resp
 	if custom, ok := cfg.CustomErrorResponses[500]; ok && custom != "" {
 		message = custom
 	}
-	return errorResponse(500, message)
+	return errorResponse(cfg, 500, message)
 }
 
 func RateLimitConfigFromSecurityConfig(cfg *SecurityConfig) RateLimitConfig {

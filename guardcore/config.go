@@ -106,6 +106,7 @@ type SecurityConfig struct {
 	RouteResolutionStrict bool
 	ExcludePaths          []string
 	CustomErrorResponses  map[int]string
+	SecurityHeaders       *SecurityHeadersConfig
 
 	OnBlock func(req Request, payload map[string]any)
 
@@ -161,6 +162,7 @@ func DefaultSecurityConfig() *SecurityConfig {
 		FailSecure:                  true,
 		ExcludePaths:                append([]string(nil), DefaultExcludePaths...),
 		CustomErrorResponses:        map[int]string{},
+		SecurityHeaders:             DefaultSecurityHeaders(),
 		MutedCheckLogs:              map[string]bool{},
 		LogSensitiveHeaders:         map[string]bool{},
 		LogSensitiveParams:          map[string]bool{},
@@ -304,6 +306,9 @@ func (c *SecurityConfig) Validate() error {
 		if len(entry) == 0 || entry[0] != '/' {
 			return fmt.Errorf("exclude_paths[%d]: %q is not an absolute path", i, entry)
 		}
+	}
+	if err := validateSecurityHeaders(c.SecurityHeaders); err != nil {
+		return err
 	}
 	if c.Detection.CompilerTimeout <= 0 {
 		c.Detection.CompilerTimeout = 2 * time.Second

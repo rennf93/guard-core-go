@@ -102,6 +102,16 @@ func (e *Engine) CreateErrorResponse(statusCode int, defaultMessage string) *Res
 	return createErrorResponse(e.Config, statusCode, defaultMessage)
 }
 
+// ResponseHeaders computes the security headers the adapter must put on every
+// normal (pass-through) response, mirroring the reference where the response
+// factory applies security_headers_manager.get_headers on the way out
+// (guard_core/core/responses/factory.py process_response). Blocked responses
+// already carry the headers: the pipeline's error factory applies them
+// engine-side. An empty map means the feature is disabled.
+func (e *Engine) ResponseHeaders() map[string]string {
+	return responseHeaders(e.Config)
+}
+
 func (e *Engine) Close() error {
 	return e.Redis.Close()
 }

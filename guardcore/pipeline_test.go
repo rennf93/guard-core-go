@@ -50,8 +50,8 @@ func testConfig(t *testing.T) *SecurityConfig {
 
 func TestPipelineFirstNonNilResponseWins(t *testing.T) {
 	cfg := testConfig(t)
-	first := &fakeCheck{name: "a", resp: errorResponse(403, "first")}
-	second := &fakeCheck{name: "b", resp: errorResponse(403, "second")}
+	first := &fakeCheck{name: "a", resp: errorResponse(nil, 403, "first")}
+	second := &fakeCheck{name: "b", resp: errorResponse(nil, 403, "second")}
 	p := NewSecurityCheckPipeline([]SecurityCheck{first, second}, cfg, nil)
 	resp := p.Execute(newTestRequest(t, nil))
 	if resp == nil || resp.StatusCode != 403 || string(resp.Body) != "first" {
@@ -130,7 +130,7 @@ func TestPipelineFailOpenContinuesOnCheckError(t *testing.T) {
 		t.Fatalf("config: %v", err)
 	}
 	boom := &fakeCheck{name: "boom", err: errors.New("kaboom")}
-	after := &fakeCheck{name: "after", resp: errorResponse(403, "blocked")}
+	after := &fakeCheck{name: "after", resp: errorResponse(nil, 403, "blocked")}
 	p := NewSecurityCheckPipeline([]SecurityCheck{boom, after}, cfg, nil)
 	resp := p.Execute(newTestRequest(t, nil))
 	if resp == nil || resp.StatusCode != 403 {
@@ -177,7 +177,7 @@ func TestPipelineOnBlockPayload(t *testing.T) {
 		payloads = append(payloads, payload)
 		mu.Unlock()
 	}
-	blocking := &fakeCheck{name: "ip_security", resp: errorResponse(403, "no")}
+	blocking := &fakeCheck{name: "ip_security", resp: errorResponse(nil, 403, "no")}
 	p := NewSecurityCheckPipeline([]SecurityCheck{blocking}, cfg, nil)
 	req := newTestRequest(t, func(opts *RequestOptions, state *RequestState) {
 		state.ClientIP = "203.0.113.9"
@@ -218,7 +218,7 @@ func TestPipelineOnBlockSuppressedChecks(t *testing.T) {
 		cfg := testConfig(t)
 		fired := false
 		cfg.OnBlock = func(req Request, payload map[string]any) { fired = true }
-		blocking := &fakeCheck{name: name, resp: errorResponse(400, "no")}
+		blocking := &fakeCheck{name: name, resp: errorResponse(nil, 400, "no")}
 		p := NewSecurityCheckPipeline([]SecurityCheck{blocking}, cfg, nil)
 		p.Execute(newTestRequest(t, nil))
 		if fired {
@@ -230,7 +230,7 @@ func TestPipelineOnBlockSuppressedChecks(t *testing.T) {
 func TestPipelineOnBlockHookPanicSwallowed(t *testing.T) {
 	cfg := testConfig(t)
 	cfg.OnBlock = func(req Request, payload map[string]any) { panic("hook exploded") }
-	blocking := &fakeCheck{name: "ip_security", resp: errorResponse(403, "no")}
+	blocking := &fakeCheck{name: "ip_security", resp: errorResponse(nil, 403, "no")}
 	p := NewSecurityCheckPipeline([]SecurityCheck{blocking}, cfg, nil)
 	resp := p.Execute(newTestRequest(t, nil))
 	if resp == nil {
