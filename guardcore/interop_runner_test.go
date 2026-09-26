@@ -32,6 +32,9 @@ const (
 	interopGCPEntry        = "192.0.2.128/25"
 	interopGCPProbe        = "192.0.2.200"
 	interopAWSPayload      = `["203.0.113.0/25|us-east-1", "203.0.113.128/25"]`
+	interopExemptIP        = "192.0.2.30"
+	interopExemptNormalIP  = "192.0.2.31"
+	interopExemptBlackIP   = "192.0.2.32"
 )
 
 type interopCheck struct {
@@ -90,6 +93,17 @@ func (r *interopRunner) inputInt(input map[string]any, key string) int {
 	return int(value)
 }
 
+// inputCount reads an expected count that arrives either as a JSON number
+// (orchestrator EXPECTED entries) or as a string (a flowed artifact like
+// exempt_n_after_py).
+func (r *interopRunner) inputCount(input map[string]any, key string) int {
+	if value, ok := input[key].(float64); ok {
+		return int(value)
+	}
+	parsed, _ := strconv.Atoi(r.inputString(input, key))
+	return parsed
+}
+
 func interopRateConfig(limit int) RateLimitConfig {
 	return RateLimitConfig{
 		EnableRateLimiting:     true,
@@ -141,6 +155,8 @@ func TestInteropRunner(t *testing.T) {
 	switch phase {
 	case "go_read_then_write":
 		runGoReadThenWrite(runner, redis, ban, rl, rlTight, input)
+	case "go_exempt_read_then_write":
+		runGoExemptReadThenWrite(runner, redis, ban, rl, host, input)
 	default:
 		t.Fatalf("go runner does not serve phase %q", phase)
 	}
@@ -291,4 +307,91 @@ func outcomeCount(out *RateLimitOutcome, err error) string {
 		return "nil"
 	}
 	return strconv.Itoa(out.Count)
+}
+
+// runGoExemptReadThenWrite serves the exempt_ips phase group: the go engine
+// runs its REAL default pipeline (NewEngine over the shared exempt config)
+// against the shared redis. The exempt client stays allowed past the shared
+// limit without ever writing the shared bucket, the non-exempt client is
+// blocked at the shared crossing, and a blacklisted exempt IP is still denied
+// (blacklist beats exemption).
+func runGoExemptReadThenWrite(r *interopRunner, redis *RedisManager, ban *IPBanManager, rl *RateLimitManager, host string, input map[string]any) {
+	limit := r.inputCount(input, "expected_exempt_limit")
+	cfg, err := NewSecurityConfig(func(c *SecurityConfig) {
+		c.RedisURL = "redis://" + host + ":6379"
+		c.RedisPrefix = interopPrefix
+		c.EnableRedis = true
+		c.EnableRateLimiting = true
+		c.RateLimit = limit
+		c.RateLimitWindow = interopRateWindow
+		c.EnableRateLimitAutoBan = false
+		c.AutoBanThreshold = 1000
+		c.Blacklist = []string{interopExemptBlackIP}
+		c.ExemptIPs = []string{interopExemptIP, interopExemptBlackIP}
+	})
+	if err != nil {
+		r.check("exempt_config", "go:go", "go builds the shared exempt config", false, err.Error())
+		return
+	}
+	engine, err := NewEngine(cfg)
+	if err != nil {
+		r.check("exempt_config", "go:go", "go builds the exempt engine", false, err.Error())
+		return
+	}
+	if err := engine.Initialize(); err != nil {
+		r.check("exempt_config", "go:go", "go initializes the exempt engine", false, err.Error())
+		return
+	}
+	defer func() { _ = engine.Close() }()
+
+	drive := func(ip string) (*Response, *RequestState) {
+		req := newTestRequest(r.t, func(opts *RequestOptions, state *RequestState) {
+			opts.ClientHost = ip
+		})
+		return engine.Check(req), req.State()
+	}
+
+	exemptFlag := false
+	exemptPassed := true
+	for i := 0; i < limit+1; i++ {
+		resp, state := drive(interopExemptIP)
+		if resp != nil {
+			exemptPassed = false
+		}
+		exemptFlag = state.IsExempt
+	}
+	r.check("exempt_allowed", "py+go:go", fmt.Sprintf("go engine passes the exempt client through %d pipeline drives at limit %d", limit+1, limit),
+		exemptPassed && exemptFlag, fmt.Sprintf("isExempt=%v", exemptFlag))
+
+	out, err := rl.CheckRateLimit(interopExemptNormalIP, "", nil, nil)
+	want := r.inputCount(input, "exempt_n_after_py") + 1
+	r.check("rate_continuity", "py:go", "go observes the shared non-exempt bucket count on an allowed hit",
+		err == nil && out != nil && !out.Blocked && out.Count == want,
+		fmt.Sprintf("count=%v want=%v", outcomeCount(out, err), want))
+
+	crossing, _ := drive(interopExemptNormalIP)
+	r.check("rate_blocked_crossing", "py+go:go", "go engine blocks the non-exempt client 429 at the shared crossing",
+		crossing != nil && crossing.StatusCode == 429 && string(crossing.Body) == "Too many requests",
+		fmt.Sprintf("status=%v", responseStatus(crossing)))
+
+	blackResp, blackState := drive(interopExemptBlackIP)
+	r.check("blacklist_precedence", "py+go:go", "go engine denies the blacklisted exempt IP 403 without the exempt flag",
+		blackResp != nil && blackResp.StatusCode == 403 && string(blackResp.Body) == RestrictionBlockedMsg && !blackState.IsExempt,
+		fmt.Sprintf("status=%v isExempt=%v", responseStatus(blackResp), blackState.IsExempt))
+
+	exemptKeys, _ := redis.ScanMatch(interopPrefix + "rate_limit:rate:" + interopExemptIP)
+	r.check("exempt_no_state", "py+go:go", "exempt traffic leaves the shared bucket empty after the go drives", len(exemptKeys) == 0,
+		fmt.Sprintf("keys=%v", exemptKeys))
+	blackKeys, _ := redis.ScanMatch(interopPrefix + "rate_limit:rate:" + interopExemptBlackIP)
+	r.check("blacklist_no_state", "py+go:go", "the blacklisted exempt bucket stays empty", len(blackKeys) == 0,
+		fmt.Sprintf("keys=%v", blackKeys))
+
+	r.artifact("exempt_n_after_go", strconv.Itoa(want+1))
+}
+
+func responseStatus(resp *Response) string {
+	if resp == nil {
+		return "nil"
+	}
+	return strconv.Itoa(resp.StatusCode)
 }
