@@ -25,6 +25,12 @@ func cloudProvidersToCheck(routeConfig *RouteConfig, global []string) []string {
 	return nil
 }
 
+// routeCloudsOverride marks the routes whose own cloud selectors replace the
+// global block list for a request, the only cloud blocking an exempt IP skips.
+func routeCloudsOverride(routeConfig *RouteConfig) bool {
+	return routeConfig != nil && len(routeConfig.BlockCloudProviders) > 0
+}
+
 type cloudIPRefreshCheck struct {
 	cfg     *SecurityConfig
 	manager *CloudManager
@@ -71,6 +77,12 @@ func (c *cloudProviderCheck) AppliesTo(cfg *SecurityConfig) bool {
 func (c *cloudProviderCheck) Check(req Request) *Response {
 	state := req.State()
 	if state.IsWhitelisted {
+		return nil
+	}
+	// An exempt IP skips only per-route cloud blocks; the global
+	// block_cloud_providers list still applies to it, mirroring the reference
+	// where the global list is enforced before the exempt flag can matter.
+	if state.IsExempt && routeCloudsOverride(state.RouteConfig) {
 		return nil
 	}
 	ip := resolveClientIP(req)

@@ -18,10 +18,21 @@ your mutation and then runs `Validate()`, returning any validation error.
 | Field | Type | Notes |
 |---|---|---|
 | `Whitelist` | `[]string` | IPs or CIDRs, validated at config time |
+| `ExemptIPs` | `[]string` | IPs or CIDRs, validated at config time; skip-list for trusted automation, see below |
 | `Blacklist` | `[]string` | IPs or CIDRs, validated at config time |
 | `ExcludePaths` | `[]string` | Absolute paths skipped by the pipeline (defaults: `/docs`, `/redoc`, `/openapi.json`, `/openapi.yaml`, `/favicon.ico`, `/static`) |
 | `EmergencyMode` | `bool` | Blocks everything except `EmergencyWhitelist` |
 | `EmergencyWhitelist` | `[]string` | Allowed during emergency mode |
+
+### Exempt IPs vs the whitelist
+
+`Whitelist` doubles as an allowlist: when it is non-empty, every IP not on it
+is denied. `ExemptIPs` is noise reduction for known-friendly automation, not
+immunity: an exempt request skips rate limiting, the user-agent check, and
+per-route cloud-provider blocks, while the blacklist, dynamic IP bans,
+penetration detection, HTTPS enforcement, and the global `BlockCloudProviders`
+block still apply. Exemption never opens the whitelist gate and never adds a
+deny path of its own; an IP on both lists is simply a whitelist match.
 
 ## Redis
 

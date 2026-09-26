@@ -74,6 +74,7 @@ type SecurityConfig struct {
 	TrustedProxyDepth    int
 	TrustXForwardedProto bool
 	Whitelist            []string
+	ExemptIPs            []string
 	Blacklist            []string
 
 	EnableRedis   bool
@@ -239,6 +240,9 @@ func (c *SecurityConfig) Validate() error {
 		return err
 	}
 	if err := validateIPList("whitelist", c.Whitelist); err != nil {
+		return err
+	}
+	if err := validateIPList("exempt_ips", c.ExemptIPs); err != nil {
 		return err
 	}
 	if err := validateIPList("blacklist", c.Blacklist); err != nil {
