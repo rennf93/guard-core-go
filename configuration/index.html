@@ -379,6 +379,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Access lists">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#exempt-ips-vs-the-whitelist" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Exempt IPs vs the whitelist
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -670,6 +687,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Access lists">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#exempt-ips-vs-the-whitelist" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Exempt IPs vs the whitelist
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -871,6 +905,11 @@ your mutation and then runs <code>Validate()</code>, returning any validation er
 <td>IPs or CIDRs, validated at config time</td>
 </tr>
 <tr>
+<td><code>ExemptIPs</code></td>
+<td><code>[]string</code></td>
+<td>IPs or CIDRs, validated at config time; skip-list for trusted automation, see below</td>
+</tr>
+<tr>
 <td><code>Blacklist</code></td>
 <td><code>[]string</code></td>
 <td>IPs or CIDRs, validated at config time</td>
@@ -892,6 +931,14 @@ your mutation and then runs <code>Validate()</code>, returning any validation er
 </tr>
 </tbody>
 </table>
+<h3 id="exempt-ips-vs-the-whitelist">Exempt IPs vs the whitelist</h3>
+<p><code>Whitelist</code> doubles as an allowlist: when it is non-empty, every IP not on it
+is denied. <code>ExemptIPs</code> is noise reduction for known-friendly automation, not
+immunity: an exempt request skips rate limiting, the user-agent check, and
+per-route cloud-provider blocks, while the blacklist, dynamic IP bans,
+penetration detection, HTTPS enforcement, and the global <code>BlockCloudProviders</code>
+block still apply. Exemption never opens the whitelist gate and never adds a
+deny path of its own; an IP on both lists is simply a whitelist match.</p>
 <h2 id="redis">Redis</h2>
 <table>
 <thead>
